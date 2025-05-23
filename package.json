@@ -1,21 +1,21 @@
 {
-  "name": "backend",
+  "name": "pi-payment-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "description": "Backend für Pi-Netzwerk-Zahlungen",
+  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "axios": "^1.9.0",
-    "body-parser": "^2.2.0",
+    "@pineapple-dev/sdk": "^2.0.0",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
-    "express": "^5.1.0"
-  }
+    "body-parser": "^1.20.2"
+  },
+  "engines": {
+    "node": ">=18.x"
+  },
+  "license": "MIT"
 }

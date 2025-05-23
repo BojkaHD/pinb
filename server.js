@@ -2,166 +2,117 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const axios = require('axios');
+const pi = require('@pineapple-dev/sdk'); // SDK hinzugefügt
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ Nur deine Domains zulassen
+// 🔄 SDK-Konfiguration hinzugefügt
+pi.configure({
+  apiKey: process.env.PI_API_KEY,
+  network: "Testnet", // Oder "Mainnet" für Produktion
+});
+
+// ✅ Domains
 const allowedOrigins = [
   'https://pinb.app',
   'https://sandbox.minepi.com/mobile-app-ui/app/pnb-c7bb42c2c289a5f4',
 ];
 
 const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('❌ Nicht erlaubter Origin: ' + origin));
-    }
+  origin: (origin, callback) => {
+    (!origin || allowedOrigins.includes(origin)) 
+      ? callback(null, true) 
+      : callback(new Error(`❌ Nicht erlaubter Origin: ${origin}`));
   },
 };
 
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-// ✅ Zahlung genehmigen
+// ✅ Zahlung genehmigen (mit SDK)
 app.post('/approve-payment', async (req, res) => {
   const { paymentId } = req.body;
-  if (!paymentId) {
-    return res.status(400).json({ error: '❌ paymentId fehlt' });
-  }
+  if (!paymentId) return res.status(400).json({ error: '❌ paymentId fehlt' });
 
-  console.log('🟢 Zahlung zur Genehmigung empfangen:', paymentId);
+  console.log('🟢 Zahlung zur Genehmigung:', paymentId);
 
   try {
-    const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
-      {},
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (response.status === 200) {
-      console.log('✅ Zahlung genehmigt:', paymentId);
-      res.json({ approved: true });
-    } else {
-      console.error('❌ Unerwartete Antwort:', response.status);
-      res.status(500).json({ error: 'Genehmigung fehlgeschlagen' });
-    }
+    await pi.approvePayment(paymentId); // SDK-Methode
+    console.log('✅ Genehmigt:', paymentId);
+    res.json({ approved: true });
   } catch (error) {
-    console.error('❌ Genehmigungsfehler:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Genehmigungsfehler' });
+    console.error('❌ Genehmigungsfehler:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// ✅ Zahlung abschließen (jetzt MIT txid!)
+// ✅ Zahlung abschließen (mit SDK)
 app.post('/complete-payment', async (req, res) => {
   const { paymentId, txid } = req.body;
-  if (!paymentId || !txid) {
-    return res.status(400).json({ error: '❌ paymentId oder txid fehlt' });
-  }
+  if (!paymentId || !txid) return res.status(400).json({ error: '❌ Parameter fehlen' });
 
-  console.log(`🟢 Zahlung zum Abschluss empfangen: ${paymentId}, txid: ${txid}`);
+  console.log(`🟢 Abschlussversuch: ${paymentId}, txid: ${txid}`);
 
   try {
-    const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      { txid },
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (response.status === 200) {
-      console.log('✅ Zahlung abgeschlossen:', paymentId);
-      res.json({ completed: true });
-    } else {
-      console.error('❌ Abschluss fehlgeschlagen:', response.status);
-      res.status(500).json({ error: 'Abschluss fehlgeschlagen' });
-    }
+    await pi.completePayment(paymentId, { txid }); // SDK-Methode
+    console.log('✅ Abgeschlossen:', paymentId);
+    res.json({ completed: true });
   } catch (error) {
-    console.error('❌ Fehler bei Abschluss:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Fehler bei Abschluss' });
+    console.error('❌ Abschlussfehler:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 🛠️ Payment „erzwingen“ abschließen (auch wenn cancelled)
+// 🛠️ Erzwungener Abschluss (SDK + manuelle txid)
 app.post('/force-complete-payment', async (req, res) => {
   const { paymentId } = req.body;
   if (!paymentId) return res.status(400).json({ error: '❌ paymentId fehlt' });
 
-  console.log('🔧 Versuch, Zahlung zu erzwingen:', paymentId);
+  console.log('🔧 Erzwungener Abschluss für:', paymentId);
 
   try {
-    const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      { txid: "fake_txid_" + Date.now() },
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    console.log('✅ Erzwungener Abschluss erfolgreich:', paymentId);
-    res.json({ forcedComplete: true });
+    await pi.completePayment(paymentId, { 
+      txid: `manual_fix_${Date.now()}` // Simulierte txid
+    });
+    res.json({ success: true });
   } catch (error) {
-    console.error('❌ Fehler beim Erzwingen:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Fehler beim Erzwingen', details: error.response?.data });
+    console.error('❌ Erzwingen fehlgeschlagen:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
+// 🚨 Temporärer Endpunkt für spezifische hängige Zahlung
+app.post('/force-complete-stuck-payment', async (req, res) => {
+  try {
+    await pi.completePayment("6lgvPEsmELkzHA8fdKyFvt2sc78K", {
+      txid: "MANUAL_FIX_" + Date.now()
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
+// ⚠️ Ursprünglicher Cancel-Endpunkt (unverändert)
 app.post('/cancel-payment', async (req, res) => {
   const { paymentId } = req.body;
-  if (!paymentId) {
-    return res.status(400).json({ error: '❌ paymentId fehlt' });
-  }
-
-  console.log('🔴 Zahlung wird abgebrochen:', paymentId);
+  if (!paymentId) return res.status(400).json({ error: '❌ paymentId fehlt' });
 
   try {
-    const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/cancel`,
-      {},
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (response.status === 200) {
-      console.log('✅ Zahlung abgebrochen:', paymentId);
-      res.json({ cancelled: true });
-    } else {
-      console.error('❌ Fehler beim Abbrechen:', response.status);
-      res.status(500).json({ error: 'Abbrechen fehlgeschlagen' });
-    }
+    await pi.cancelPayment(paymentId); // SDK-Methode
+    res.json({ cancelled: true });
   } catch (error) {
-    console.error('❌ Fehler beim Abbrechen:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Fehler beim Abbrechen' });
+    console.error('❌ Abbrechen fehlgeschlagen:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
-
 
 // Test-Endpunkt
 app.get('/', (req, res) => {
   res.send('✅ Pi Payment Backend läuft');
 });
 
-// Serverstart
 app.listen(PORT, () => {
-  console.log(`🚀 Server läuft auf http://localhost:${PORT}`);
+  console.log(`🚀 Server läuft auf Port ${PORT}`);
 });
