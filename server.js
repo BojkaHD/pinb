@@ -94,6 +94,30 @@ app.post('/complete-payment', async (req, res) => {
   }
 });
 
+app.post('/cancel-payment', async (req, res) => {
+  const { paymentId } = req.body;
+  if (!paymentId) {
+    return res.status(400).json({ error: 'paymentId fehlt' });
+  }
+
+  try {
+    const result = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/cancel`,
+      {},
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    res.json({ cancelled: true, result: result.data });
+  } catch (error) {
+    res.status(500).json({ error: 'Abbruch fehlgeschlagen', details: error.message });
+  }
+});
+
 // Test-Endpunkt
 app.get('/', (req, res) => {
   res.send('✅ Pi Payment Backend läuft');
