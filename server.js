@@ -35,7 +35,10 @@ app.post('/approve-payment', (req, res) => {
 
   console.log('✅ Zahlung empfangen:', paymentId);
 
-  // Hier kannst du zusätzliche Validierungen oder Logik einfügen
+  // Sende sofortige Genehmigung zurück
+  res.json({ approved: true });
+});
+
 app.post('/complete-payment', async (req, res) => {
   const { paymentId } = req.body;
 
@@ -48,10 +51,6 @@ app.post('/complete-payment', async (req, res) => {
     console.error('❌ Fehler bei Completion:', error);
     res.status(500).json({ error: 'Abschluss fehlgeschlagen' });
   }
-});
-
-  // Sende sofortige Genehmigung zurück
-  res.json({ approved: true });
 });
 
 // Optionale GET-Route für die Root-URL (nützlich für Tests)
