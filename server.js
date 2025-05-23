@@ -136,7 +136,6 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
         }
       }
     );
-
     // 2. Je nach Status handeln
     const paymentStatus = statusCheck.data.status;
     let action = 'none';
@@ -165,6 +164,36 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ 
       error: error.response?.data || error.message 
     });
+  }
+});
+
+app.post('/refund-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId, amount } = req.body;
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/refund`,
+      { amount },
+      { headers: { Authorization: `Key ${process.env.PI_API_KEY}` }}
+    );
+    res.json({ refundStatus: 'success', data: response.data });
+  } catch (error) {
+    res.status(500).json({ error: error.response?.data?.error_message || "Rückerstattung fehlgeschlagen" });
+  }
+});
+
+app.post('/bulk-cancel', validateApiKey, async (req, res) => {
+  try {
+    const { paymentIds } = req.body; // Array von IDs
+    const results = await Promise.all(
+      paymentIds.map(id => 
+        axios.post(`https://api.minepi.com/v2/payments/${id}/cancel`, {}, {
+          headers: { Authorization: `Key ${process.env.PI_API_KEY}` }
+        })
+      )
+    );
+    res.json({ cancelled: results.length });
+  } catch (error) {
+    res.status(500).json({ error: "Fehler beim Massenabbruch" });
   }
 });
 
