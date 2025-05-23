@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ✅ CORS-Konfiguration: Erlaube nur deine Live-Domain
-const allowedOrigins = ['https://sandbox.minepi.com/mobile-app-ui/app/pnb-c7bb42c2c289a5f4'];
+const allowedOrigins = ['https://pinb.app','https://sandbox.minepi.com/mobile-app-ui/app/pnb-c7bb42c2c289a5f4'];
 
  // Ersetze mit deiner tatsächlichen Frontend-Domain
 
