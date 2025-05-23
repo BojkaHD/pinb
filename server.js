@@ -1,4 +1,6 @@
 // backend/server.js
+const axios = require('axios');
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -30,13 +32,30 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // POST-Route zur Zahlungsfreigabe
-app.post('/approve-payment', (req, res) => {
+app.post('/approve-payment', async (req, res) => {
   const { paymentId } = req.body;
 
-  console.log('✅ Zahlung empfangen:', paymentId);
+  try {
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+      {},
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
 
-  // Sende sofortige Genehmigung zurück
-  res.json({ approved: true });
+    if (response.status === 200) {
+      res.json({ approved: true });
+    } else {
+      res.status(500).json({ error: 'Genehmigung fehlgeschlagen' });
+    }
+  } catch (error) {
+    console.error('❌ Fehler bei der Genehmigung:', error);
+    res.status(500).json({ error: 'Genehmigung fehlgeschlagen' });
+  }
 });
 
 app.post('/complete-payment', async (req, res) => {
