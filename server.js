@@ -1,4 +1,3 @@
-// backend/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -8,7 +7,7 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ Erlaube nur definierte Ursprünge (deine Domains)
+// ✅ Nur deine Domains zulassen
 const allowedOrigins = [
   'https://pinb.app',
   'https://sandbox.minepi.com/mobile-app-ui/app/pnb-c7bb42c2c289a5f4',
@@ -19,7 +18,7 @@ const corsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Nicht erlaubter Origin: ' + origin));
+      callback(new Error('❌ Nicht erlaubter Origin: ' + origin));
     }
   },
 };
@@ -27,10 +26,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-// ✅ Zahlung automatisch genehmigen
+// ✅ Zahlung genehmigen
 app.post('/approve-payment', async (req, res) => {
   const { paymentId } = req.body;
-  console.log('🟢 Zahlung empfangen:', paymentId);
+  if (!paymentId) {
+    return res.status(400).json({ error: '❌ paymentId fehlt' });
+  }
+
+  console.log('🟢 Zahlung zur Genehmigung empfangen:', paymentId);
 
   try {
     const response = await axios.post(
@@ -48,19 +51,23 @@ app.post('/approve-payment', async (req, res) => {
       console.log('✅ Zahlung genehmigt:', paymentId);
       res.json({ approved: true });
     } else {
-      console.error('❌ Genehmigung fehlgeschlagen:', response.status);
+      console.error('❌ Unerwartete Antwort:', response.status);
       res.status(500).json({ error: 'Genehmigung fehlgeschlagen' });
     }
   } catch (error) {
-    console.error('❌ Fehler bei Genehmigung:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Fehler bei Genehmigung' });
+    console.error('❌ Genehmigungsfehler:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Genehmigungsfehler' });
   }
 });
 
-// ✅ Zahlung automatisch abschließen
+// ✅ Zahlung abschließen
 app.post('/complete-payment', async (req, res) => {
   const { paymentId } = req.body;
-  console.log('🟢 Abschluss empfangen:', paymentId);
+  if (!paymentId) {
+    return res.status(400).json({ error: '❌ paymentId fehlt' });
+  }
+
+  console.log('🟢 Zahlung zum Abschluss empfangen:', paymentId);
 
   try {
     const response = await axios.post(
@@ -92,6 +99,7 @@ app.get('/', (req, res) => {
   res.send('✅ Pi Payment Backend läuft');
 });
 
+// Serverstart
 app.listen(PORT, () => {
   console.log(`🚀 Server läuft auf http://localhost:${PORT}`);
 });
