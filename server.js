@@ -97,26 +97,36 @@ app.post('/complete-payment', async (req, res) => {
 app.post('/cancel-payment', async (req, res) => {
   const { paymentId } = req.body;
   if (!paymentId) {
-    return res.status(400).json({ error: 'paymentId fehlt' });
+    return res.status(400).json({ error: '❌ paymentId fehlt' });
   }
 
+  console.log('🔴 Zahlung wird abgebrochen:', paymentId);
+
   try {
-    const result = await axios.post(
+    const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/cancel`,
       {},
       {
         headers: {
           Authorization: `Key ${process.env.PI_API_KEY}`,
           'Content-Type': 'application/json',
-        }
+        },
       }
     );
 
-    res.json({ cancelled: true, result: result.data });
+    if (response.status === 200) {
+      console.log('✅ Zahlung abgebrochen:', paymentId);
+      res.json({ cancelled: true });
+    } else {
+      console.error('❌ Fehler beim Abbrechen:', response.status);
+      res.status(500).json({ error: 'Abbrechen fehlgeschlagen' });
+    }
   } catch (error) {
-    res.status(500).json({ error: 'Abbruch fehlgeschlagen', details: error.message });
+    console.error('❌ Fehler beim Abbrechen:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Fehler beim Abbrechen' });
   }
 });
+
 
 // Test-Endpunkt
 app.get('/', (req, res) => {
