@@ -94,6 +94,34 @@ app.post('/complete-payment', async (req, res) => {
   }
 });
 
+// 🛠️ Payment „erzwingen“ abschließen (auch wenn cancelled)
+app.post('/force-complete-payment', async (req, res) => {
+  const { paymentId } = req.body;
+  if (!paymentId) return res.status(400).json({ error: '❌ paymentId fehlt' });
+
+  console.log('🔧 Versuch, Zahlung zu erzwingen:', paymentId);
+
+  try {
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      { txid: "fake_txid_" + Date.now() },
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    console.log('✅ Erzwungener Abschluss erfolgreich:', paymentId);
+    res.json({ forcedComplete: true });
+  } catch (error) {
+    console.error('❌ Fehler beim Erzwingen:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Fehler beim Erzwingen', details: error.response?.data });
+  }
+});
+
+
 app.post('/cancel-payment', async (req, res) => {
   const { paymentId } = req.body;
   if (!paymentId) {
