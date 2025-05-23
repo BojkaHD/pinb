@@ -60,19 +60,19 @@ app.post('/approve-payment', async (req, res) => {
   }
 });
 
-// ✅ Zahlung abschließen
+// ✅ Zahlung abschließen (jetzt MIT txid!)
 app.post('/complete-payment', async (req, res) => {
-  const { paymentId } = req.body;
-  if (!paymentId) {
-    return res.status(400).json({ error: '❌ paymentId fehlt' });
+  const { paymentId, txid } = req.body;
+  if (!paymentId || !txid) {
+    return res.status(400).json({ error: '❌ paymentId oder txid fehlt' });
   }
 
-  console.log('🟢 Zahlung zum Abschluss empfangen:', paymentId);
+  console.log(`🟢 Zahlung zum Abschluss empfangen: ${paymentId}, txid: ${txid}`);
 
   try {
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      {},
+      { txid },
       {
         headers: {
           Authorization: `Key ${process.env.PI_API_KEY}`,
