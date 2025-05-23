@@ -36,6 +36,19 @@ app.post('/approve-payment', (req, res) => {
   console.log('✅ Zahlung empfangen:', paymentId);
 
   // Hier kannst du zusätzliche Validierungen oder Logik einfügen
+app.post('/complete-payment', async (req, res) => {
+  const { paymentId } = req.body;
+
+  try {
+    // ✅ Bestätige Abschluss bei Pi
+    await pi.completePayment(paymentId); 
+    res.json({ completed: true });
+  
+  } catch (error) {
+    console.error('❌ Fehler bei Completion:', error);
+    res.status(500).json({ error: 'Abschluss fehlgeschlagen' });
+  }
+});
 
   // Sende sofortige Genehmigung zurück
   res.json({ approved: true });
