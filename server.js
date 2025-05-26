@@ -8,6 +8,11 @@ const StellarSdk = require('stellar-sdk');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const piAsset = new StellarSdk.Asset(
+  "PI",
+  "GADGPF6FQL4FBA6L6LCS6LSUHS2QH6U7H2VMOBRU4ZKAZPSSTTETEXVX"
+);
+
 // Stellar Server für Pi Testnet konfigurieren
 const testnetServer = new StellarSdk.Server('https://api.testnet.minepi.com');
 const networkPassphrase = 'Pi Testnet'; // Pi-spezifisches Netzwerk-Passphrase
@@ -52,28 +57,29 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
   try {
     const { recipient, amount = "1" } = req.body;
 
+    // 1. Validierung
     if (!recipient || !recipient.startsWith('G')) {
       return res.status(400).json({ error: "Ungültige Wallet-Adresse" });
     }
 
-    // Quelle Wallet laden
+    // 2. Wallet initialisieren
     const sourceKeypair = StellarSdk.Keypair.fromSecret(process.env.TESTNET_SECRET);
     const sourceAccount = await testnetServer.loadAccount(sourceKeypair.publicKey());
 
-    // Transaktion erstellen
+    // 3. Transaktion erstellen
     const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-      fee: StellarSdk.BASE_FEE,
-      networkPassphrase: networkPassphrase
+      fee: 100, // 👈 Korrekte Gebühr für Pi Testnet
+      networkPassphrase: "Pi Testnet" // 👈 Wörtlich angegeben
     })
-      .addOperation(StellarSdk.Operation.payment({
-        destination: recipient,
-        asset: StellarSdk.Asset.native(),
-        amount: amount.toString()
-      }))
-      .setTimeout(30)
-      .build();
+    .addOperation(StellarSdk.Operation.payment({
+      destination: recipient,
+      asset: piAsset, // 👈 Globale piAsset-Definition
+      amount: 1
+    }))
+    .setTimeout(30)
+    .build();
 
-    // Transaktion signieren und senden
+    // 4. Transaktion signieren & senden
     transaction.sign(sourceKeypair);
     const result = await testnetServer.submitTransaction(transaction);
 
@@ -86,10 +92,10 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Fehler bei Testnet-Zahlung:', error.response?.data || error.message);
-    res.status(500).json({ 
+    console.error('❌ Fehler:', error.response?.data || error.message);
+    res.status(500).json({
       error: error.message,
-      details: error.response?.data 
+      details: error.response?.data || error.stack
     });
   }
 });
