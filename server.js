@@ -11,8 +11,8 @@ const PORT = process.env.PORT || 3000;
 // 1. KORREKTE PI TESTNET-KONFIGURATION
 const server = new StellarSdk.Server('https://api.testnet.minepi.com');
 const piAsset = new StellarSdk.Asset(
-  "PI",
-  "GCGNUBSMGBJAYB3YNOZQ5XYP5BWMNSOMUES5VGLUJKHZYBSS2N25D2LZ" // 🔄 Korrigierte Issuer-Adresse
+  "PI", 
+  "GCGNUBSMGBJAYB3YNOZQ5XYP5BWMNSOMUES5VGLUJKHZYBSS2N25D2LZ"
 );
 
 // 2. CORS-KONFIGURATION
@@ -65,13 +65,13 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
     const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
 
     const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-      fee: 100,
+      fee: 100000,
       networkPassphrase: "Pi Testnet" // 🔥 Case-sensitive!
     })
     .addOperation(StellarSdk.Operation.payment({
       destination: recipient,
       asset: piAsset,
-      amount: "1"
+      amount: amount.toString()
     }))
     .setTimeout(30)
     .build();
@@ -137,7 +137,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
 // Server-Start
 app.listen(PORT, () => {
   console.log(`🚀 Backend läuft auf Port ${PORT}`);
-  console.log(`🔐 TESTNET_SECRET: ${process.env.PI_API_KEY ? "✅" : "❌"}`);
+  //console.log(`🔐 TESTNET_SECRET: ${process.env.PI_API_KEY ? "✅" : "❌"}`);
   console.log(`🔐 TESTNET_SECRET: ${process.env.TESTNET_SECRET ? "✅" : "❌"}`);
   console.log(`🔒 INTERNAL_API_KEY: ${process.env.INTERNAL_API_KEY ? "✅" : "❌"}`);
 });
