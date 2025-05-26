@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const axios = require('axios');
 const StellarSdk = require('stellar-sdk');
 
 const app = express();
@@ -38,7 +37,7 @@ app.use(bodyParser.json());
 const validateApiKey = (req, res, next) => {
   const apiKey = req.headers['x-api-key'] || req.query.apiKey;
   
-  if (!process.env.TESTNET_SECRET) { // 🔥 PI_API_KEY nicht mehr nötig
+  if (!process.env.TESTNET_SECRET) {
     return res.status(500).json({ error: "TESTNET_SECRET nicht gesetzt" });
   }
 
@@ -66,7 +65,7 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
 
     const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
       fee: 100000,
-      networkPassphrase: "Pi Testnet" // 🔥 Case-sensitive!
+      networkPassphrase: "Pi Testnet"
     })
     .addOperation(StellarSdk.Operation.payment({
       destination: recipient,
