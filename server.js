@@ -196,6 +196,37 @@ app.post('/bulk-cancel', validateApiKey, async (req, res) => {
     res.status(500).json({ error: "Fehler beim Massenabbruch" });
   }
 });
+app.post('/send-test-payment', validateApiKey, async (req, res) => {
+  try {
+    const { recipient, amount, memo } = req.body;
+
+    if (!recipient) return res.status(400).json({ error: "Empfängeradresse fehlt" });
+
+    const payment = {
+      amount: amount || 1,
+      memo: memo || "Testzahlung an Nutzer",
+      metadata: { type: "test-payout" },
+      to: recipient
+    };
+
+    const response = await axios.post(
+      "https://api.minepi.com/v2/payments",
+      payment,
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json({ success: true, paymentId: response.data.identifier });
+  } catch (err) {
+    console.error("App2User Fehler:", err.response?.data || err.message);
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
+
 
 // 🏁 Server starten
 app.listen(PORT, () => {
