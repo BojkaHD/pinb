@@ -36,12 +36,13 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
     const { amount, memo, to } = req.body; // "to" = Wallet-Adresse
 
-    if (!to) throw new Error("Empfänger-Adresse fehlt");
+    if (!to) return res.status(400).json({ error: "Empfänger-Adresse fehlt" });
+    if (!amount) return res.status(400).json({ error: "Betrag fehlt" });
 
     const paymentPayload = {
-      amount,
+      amount: amount.toString(), // unbedingt String!
       memo: memo || "App to User Zahlung",
-      to,  // Wallet-Adresse als String
+      to,
       metadata: { type: "app-to-user-payment" }
     };
 
@@ -62,7 +63,6 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
-
 
 // 2. Zahlung genehmigen
 app.post('/approve-payment', validateApiKey, async (req, res) => {
