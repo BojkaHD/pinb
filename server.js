@@ -8,12 +8,18 @@ const StellarSdk = require('stellar-sdk');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const { Keypair, Server, Networks, TransactionBuilder, Operation, Asset, Memo } = StellarSdk;
+const Keypair = StellarSdk.Keypair;
+const Networks = StellarSdk.Networks;
+const TransactionBuilder = StellarSdk.TransactionBuilder;
+const Operation = StellarSdk.Operation;
+const Asset = StellarSdk.Asset;
+const Memo = StellarSdk.Memo;
+const stellarServer = new StellarSdk.Server("https://api.testnet.minepi.com");
 
 // ✅ Testnet-Konfiguration
 const TESTNET_SECRET = process.env.TESTNET_SECRET; // App Wallet (Secret Key)
 const SOURCE_KEYPAIR = Keypair.fromSecret(TESTNET_SECRET);
-const stellarServer = new Server("https://api.testnet.minepi.com");
+
 
 // ✅ Erlaubte Domains
 const allowedOrigins = [
