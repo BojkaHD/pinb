@@ -2,28 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const StellarSdk = require('stellar-sdk');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. PI TESTNET-KONFIGURATION (gemäß Pi-Dokumentation)
-const server = new StellarSdk.Horizon.Server('https://api.testnet.minepi.com');
-const networkPassphrase = "Pi Network"; // 👈 Offizielle Passphrase
-const piIssuer = "GCGNUBSMGBJAYB3YNOZQ5XYP5BWMNSOMUES5VGLUJKHZYBSS2N25D2LZ";
-
-// 2. ISSUER-VALIDIERUNG (Kritisch!)
-if (!StellarSdk.StrKey.isValidEd25519PublicKey(piIssuer)) {
-  console.error("❌ FATAL: Ungültige Issuer-Adresse");
-  process.exit(1);
-}
-
-const piAsset = new StellarSdk.Asset("PI", piIssuer);
-
-// 2. CORS-KONFIGURATION
 const allowedOrigins = [
   'https://pinb.app',
-  'https://sandbox.minepi.com'
+  'https://sandbox.minepi.com',
 ];
 
 app.use(cors({
@@ -31,53 +17,92 @@ app.use(cors({
     if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
       callback(null, true);
     } else {
-      console.warn(`🚫 Blockierter Origin: ${origin}`);
-      callback(new Error('Nicht erlaubt durch CORS'));
+      callback(new Error(`🚫 Blockierter Origin: ${origin}`));
     }
   }
 }));
 
 app.use(bodyParser.json());
 
-//Test-Zahlungen
-app.post('/send-test-payment', validateApiKey, async (req, res) => {
-  try {
-    const { recipient, amount = "1" } = req.body;
-
-    // Wallet laden
-    const sourceKeypair = StellarSdk.Keypair.fromSecret(process.env.TESTNET_SECRET);
-    const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
-
-    // Transaktion erstellen
-    const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-      fee: 1000000, // 0.1 PI (gemäß Pi-Doku)
-      networkPassphrase: networkPassphrase
-    })
-    .addOperation(StellarSdk.Operation.payment({
-      destination: recipient,
-      asset: piAsset,
-      amount: amount.toString()
-    }))
-    .setTimeout(30)
-    .build();
-
-    // Transaktion signieren & senden
-    transaction.sign(sourceKeypair);
-    const result = await server.submitTransaction(transaction, {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" } // 👈 Pi-API-Requirement
-    });
-
-    res.json({ 
-      success: true,
-      txid: result.hash,
-      explorer: `https://testnet.minepi.com/explorer/tx/${result.hash}`
-    });
-
-  } catch (error) {
-    console.error('❌ Pi Testnet-Fehler:', error.response?.data || error);
-    res.status(500).json({ 
-      error: error.message,
-      details: error.response?.data 
-    });
+// API-Key Middleware
+const validateApiKey = (req, res, next) => {
+  if (!process.env.PI_API_KEY) {
+    return res.status(500).json({ error: "PI_API_KEY nicht konfiguriert" });
   }
+  next();
+};
+
+// 1. Zahlung erstellen (App -> User)
+app.post('/create-payment', validateApiKey, async (req, res) => {
+  try {
+    const { amount, memo, to } = req.body;
+    if (!to) return res.status(400).json({ error: "Empfänger-Adresse fehlt" });
+    if (!amount) return res.status(400).json({ error: "Betrag fehlt" });
+
+    const payload = {
+      amount: amount.toString(),
+      memo: memo || "Manuelle App2User Zahlung",
+      to,
+      metadata: { type: "app-to-user-payment" }
+    };
+
+    const response = await axios.post(
+      "https://api.minepi.com/v2/payments",
+      payload,
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json({ paymentId: response.data.identifier });
+  } catch (error) {
+    console.error("Fehler beim Erstellen der Zahlung:", error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
+  }
+});
+
+// 2. Zahlung genehmigen (Developer Approval)
+app.post('/approve-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId } = req.body;
+    if (!paymentId) return res.status(400).json({ error: "paymentId fehlt" });
+
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+      {},
+      { headers: { Authorization: `Key ${process.env.PI_API_KEY}` } }
+    );
+
+    res.json({ status: 'approved', data: response.data });
+  } catch (error) {
+    console.error("Fehler beim Genehmigen der Zahlung:", error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
+  }
+});
+
+// 3. Zahlung abschließen (Transaction ID angeben)
+app.post('/complete-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId, txid } = req.body;
+    if (!paymentId || !txid) return res.status(400).json({ error: "paymentId und txid erforderlich" });
+
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      { txid },
+      { headers: { Authorization: `Key ${process.env.PI_API_KEY}` } }
+    );
+
+    res.json({ status: 'completed', data: response.data });
+  } catch (error) {
+    console.error("Fehler beim Abschließen der Zahlung:", error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Backend läuft auf Port ${PORT}`);
+  console.log(`🔐 PI_API_KEY: ${process.env.PI_API_KEY ? "✅ vorhanden" : "❌ fehlt"}`);
 });
