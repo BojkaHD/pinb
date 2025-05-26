@@ -94,50 +94,9 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
   }
 });
 
-// 2. Mainnet-Zahlung mit Pi Platform API
-app.post('/create-payment', validateApiKey, async (req, res) => {
-  try {
-    const { amount, memo, uid } = req.body;
-
-    if (!amount || !uid) {
-      return res.status(400).json({ error: "Fehlende Parameter" });
-    }
-
-    const response = await axios.post(
-      "https://api.minepi.com/v2/payments",
-      {
-        amount: amount.toString(),
-        memo: memo || "App to User Zahlung",
-        uid: uid,
-        metadata: { type: "app-to-user-payment" }
-      },
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    res.json({ 
-      paymentId: response.data.identifier,
-      approvalUrl: response.data.url 
-    });
-
-  } catch (error) {
-    const errorData = error.response?.data || { error: "Unbekannter Fehler" };
-    console.error("Fehler bei Pi Platform API:", errorData);
-    res.status(500).json({
-      error: "Zahlung fehlgeschlagen",
-      piError: errorData
-    });
-  }
-});
-
 // Server-Start
 app.listen(PORT, () => {
   console.log(`🚀 Backend läuft auf Port ${PORT}`);
-  //console.log(`🔐 TESTNET_SECRET: ${process.env.PI_API_KEY ? "✅" : "❌"}`);
   console.log(`🔐 TESTNET_SECRET: ${process.env.TESTNET_SECRET ? "✅" : "❌"}`);
   console.log(`🔒 INTERNAL_API_KEY: ${process.env.INTERNAL_API_KEY ? "✅" : "❌"}`);
 });
