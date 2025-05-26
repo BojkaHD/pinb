@@ -8,11 +8,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 1. KORREKTE PI TESTNET-KONFIGURATION
+const piIssuer = "GCGNUBSMGBJAYB3YNOZQ5XYP5BWMNSOMUES5VGLUJKHZYBSS2N25D2LZ";
+// Prüfe, ob die Issuer-Adresse gültig ist
+if (!StellarSdk.StrKey.isValidEd25519PublicKey(piIssuer)) {
+  console.error("❌ Ungültige Issuer-Adresse:", piIssuer);
+  process.exit(1); // Beende die App mit Fehlercode
+}
+
 const server = new StellarSdk.Horizon.Server('https://api.testnet.minepi.com');
-const piAsset = new StellarSdk.Asset(
-  "PI", 
-  "GCGNUBSMGBJAYB3YNOZQ5XYP5BWMNSOMUES5VGLUJKHZYBSS2N25D2LZ"
-);
+const piAsset = new StellarSdk.Asset("PI", piIssuer);
 
 // 2. CORS-KONFIGURATION
 const allowedOrigins = [
@@ -76,7 +80,9 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
     .build();
 
     transaction.sign(sourceKeypair);
-    const result = await server.submitTransaction(transaction);
+    const result = await server.submitTransaction(transaction, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" }
+    });
 
     res.json({ 
       success: true,
