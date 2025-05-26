@@ -10,8 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 // ✅ Testnet-Konfiguration
 const TESTNET_SECRET = process.env.TESTNET_SECRET;
-const SOURCE_KEYPAIR = StellarSdk.Keypair.fromSecret(TESTNET_SECRET);
-
+const SOURCE_KEYPAIR = Keypair.fromSecret(TESTNET_SECRET);  // FIXED ❗
 const stellarServer = new Server("https://api.testnet.minepi.com");
 
 // ✅ Erlaubte Domains
