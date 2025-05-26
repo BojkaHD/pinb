@@ -7,15 +7,17 @@ const StellarSdk = require('stellar-sdk');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. KORREKTE PI TESTNET-KONFIGURATION
+// 1. PI TESTNET-KONFIGURATION (gemäß Pi-Dokumentation)
+const server = new StellarSdk.Horizon.Server('https://api.testnet.minepi.com');
+const networkPassphrase = "Pi Network"; // 👈 Offizielle Passphrase
 const piIssuer = "GCGNUBSMGBJAYB3YNOZQ5XYP5BWMNSOMUES5VGLUJKHZYBSS2N25D2LZ";
-// Prüfe, ob die Issuer-Adresse gültig ist
+
+// 2. ISSUER-VALIDIERUNG (Kritisch!)
 if (!StellarSdk.StrKey.isValidEd25519PublicKey(piIssuer)) {
-  console.error("❌ Ungültige Issuer-Adresse:", piIssuer);
-  process.exit(1); // Beende die App mit Fehlercode
+  console.error("❌ FATAL: Ungültige Issuer-Adresse");
+  process.exit(1);
 }
 
-const server = new StellarSdk.Horizon.Server('https://api.testnet.minepi.com');
 const piAsset = new StellarSdk.Asset("PI", piIssuer);
 
 // 2. CORS-KONFIGURATION
@@ -37,39 +39,19 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
-// 3. VALIDIERUNGS-MIDDLEWARE
-const validateApiKey = (req, res, next) => {
-  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
-  
-  if (!process.env.TESTNET_SECRET) {
-    return res.status(500).json({ error: "TESTNET_SECRET nicht gesetzt" });
-  }
-
-  if (apiKey !== process.env.INTERNAL_API_KEY) {
-    console.warn('🚫 Unauthorisierter API-Key Versuch:', apiKey);
-    return res.status(403).json({ error: "Unautorisiert" });
-  }
-  
-  next();
-};
-
-// 4. TESTNET-ZAHLUNGEN
+//Test-Zahlungen
 app.post('/send-test-payment', validateApiKey, async (req, res) => {
   try {
     const { recipient, amount = "1" } = req.body;
 
-    // Validierung
-    if (!recipient?.startsWith('G')) {
-      return res.status(400).json({ error: "Ungültige Wallet-Adresse" });
-    }
-
-    // Wallet & Transaktion
+    // Wallet laden
     const sourceKeypair = StellarSdk.Keypair.fromSecret(process.env.TESTNET_SECRET);
     const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
 
+    // Transaktion erstellen
     const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-      fee: 100000,
-      networkPassphrase: "Pi Testnet"
+      fee: 1000000, // 0.1 PI (gemäß Pi-Doku)
+      networkPassphrase: networkPassphrase
     })
     .addOperation(StellarSdk.Operation.payment({
       destination: recipient,
@@ -79,9 +61,10 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
     .setTimeout(30)
     .build();
 
+    // Transaktion signieren & senden
     transaction.sign(sourceKeypair);
     const result = await server.submitTransaction(transaction, {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" }
+      headers: { "Content-Type": "application/x-www-form-urlencoded" } // 👈 Pi-API-Requirement
     });
 
     res.json({ 
@@ -91,17 +74,10 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Testnet-Fehler:', error.response?.data || error);
+    console.error('❌ Pi Testnet-Fehler:', error.response?.data || error);
     res.status(500).json({ 
       error: error.message,
-      details: error.response?.data || error.stack 
+      details: error.response?.data 
     });
   }
-});
-
-// Server-Start
-app.listen(PORT, () => {
-  console.log(`🚀 Backend läuft auf Port ${PORT}`);
-  console.log(`🔐 TESTNET_SECRET: ${process.env.TESTNET_SECRET ? "✅" : "❌"}`);
-  console.log(`🔒 INTERNAL_API_KEY: ${process.env.INTERNAL_API_KEY ? "✅" : "❌"}`);
 });
