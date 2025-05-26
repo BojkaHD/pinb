@@ -3,10 +3,14 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-const { createPayment } = require('@pi-blockchain/core');
+const StellarSdk = require('stellar-sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Stellar Server für Pi Testnet konfigurieren
+const testnetServer = new StellarSdk.Server('https://api.testnet.minepi.com');
+const networkPassphrase = 'Pi Testnet'; // Pi-spezifisches Netzwerk-Passphrase
 
 // Sicherheitskonfiguration
 const allowedOrigins = [
@@ -43,7 +47,7 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
-// 1. Zahlung via Blockchain (Testnet)
+// 1. Testnet-Zahlung mit Stellar SDK
 app.post('/send-test-payment', validateApiKey, async (req, res) => {
   try {
     const { recipient, amount = "1" } = req.body;
@@ -52,24 +56,37 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
       return res.status(400).json({ error: "Ungültige Wallet-Adresse" });
     }
 
-    const payment = await createPayment({
-      recipientAddress: recipient,
-      amount: amount.toString(),
-      memo: "Testzahlung vom App-Wallet",
-      privateKey: process.env.TESTNET_SECRET,
-      network: "Testnet"
-    });
+    // Quelle Wallet laden
+    const sourceKeypair = StellarSdk.Keypair.fromSecret(process.env.TESTNET_SECRET);
+    const sourceAccount = await testnetServer.loadAccount(sourceKeypair.publicKey());
 
-    console.log(`✅ Zahlung an ${recipient} erfolgreich:`, payment.txid);
+    // Transaktion erstellen
+    const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: networkPassphrase
+    })
+      .addOperation(StellarSdk.Operation.payment({
+        destination: recipient,
+        asset: StellarSdk.Asset.native(),
+        amount: amount.toString()
+      }))
+      .setTimeout(30)
+      .build();
+
+    // Transaktion signieren und senden
+    transaction.sign(sourceKeypair);
+    const result = await testnetServer.submitTransaction(transaction);
+
+    console.log(`✅ Zahlung an ${recipient} erfolgreich:`, result.hash);
     
     res.json({
       success: true,
-      txid: payment.txid,
-      explorer: `https://testnet.minepi.com/explorer/tx/${payment.txid}`
+      txid: result.hash,
+      explorer: `https://testnet.minepi.com/explorer/tx/${result.hash}`
     });
 
   } catch (error) {
-    console.error(`❌ Fehler bei Blockchain-Zahlung:`, error.message);
+    console.error('❌ Fehler bei Testnet-Zahlung:', error.response?.data || error.message);
     res.status(500).json({ 
       error: error.message,
       details: error.response?.data 
@@ -77,7 +94,7 @@ app.post('/send-test-payment', validateApiKey, async (req, res) => {
   }
 });
 
-// 2. Legacy: Zahlung via Platform API (UID)
+// 2. Mainnet-Zahlung mit Pi Platform API
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
     const { amount, memo, uid } = req.body;
@@ -91,7 +108,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
       {
         amount: amount.toString(),
         memo: memo || "App to User Zahlung",
-        uid,
+        uid: uid,
         metadata: { type: "app-to-user-payment" }
       },
       {
@@ -108,10 +125,11 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Fehler bei Platform API:", error.response?.data);
+    const errorData = error.response?.data || { error: "Unbekannter Fehler" };
+    console.error("Fehler bei Pi Platform API:", errorData);
     res.status(500).json({
       error: "Zahlung fehlgeschlagen",
-      piError: error.response?.data
+      piError: errorData
     });
   }
 });
