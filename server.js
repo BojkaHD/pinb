@@ -3,25 +3,15 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-const StellarSdk = require('stellar-sdk');
+const { Server, Keypair, Networks, TransactionBuilder, Operation, Asset, Memo } = require("stellar-sdk");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const Keypair = StellarSdk.Keypair;
-const Networks = StellarSdk.Networks;
-const TransactionBuilder = StellarSdk.TransactionBuilder;
-const Operation = StellarSdk.Operation;
-const Asset = StellarSdk.Asset;
-const Memo = StellarSdk.Memo;
-const { Server } = require("stellar-sdk");
-const stellarServer = new Server("https://api.testnet.minepi.com");
-
-
 // ✅ Testnet-Konfiguration
-const TESTNET_SECRET = process.env.TESTNET_SECRET; // App Wallet (Secret Key)
+const TESTNET_SECRET = process.env.TESTNET_SECRET;
 const SOURCE_KEYPAIR = Keypair.fromSecret(TESTNET_SECRET);
-
+const stellarServer = new Server("https://api.testnet.minepi.com");
 
 // ✅ Erlaubte Domains
 const allowedOrigins = [
@@ -98,7 +88,6 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     );
 
     res.json({ status: 'approved', piData: response.data });
-
   } catch (error) {
     const piError = error.response?.data || error.message;
     console.error("APPROVE ERROR:", piError);
@@ -124,7 +113,6 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     res.json({ status: 'completed', piData: response.data });
-
   } catch (error) {
     const piError = error.response?.data || error.message;
     console.error("COMPLETE ERROR:", piError);
@@ -150,7 +138,6 @@ app.post('/cancel-payment', validateApiKey, async (req, res) => {
     );
 
     res.json({ status: 'cancelled', piData: response.data });
-
   } catch (error) {
     const piError = error.response?.data?.error_message || error.message;
     console.error("CANCEL ERROR:", piError);
@@ -191,7 +178,6 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
     }
 
     res.json({ status: 'forced_resolution', originalStatus: paymentStatus, actionTaken: action });
-
   } catch (error) {
     res.status(500).json({ error: error.response?.data || error.message });
   }
