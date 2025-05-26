@@ -32,19 +32,20 @@ const validateApiKey = (req, res, next) => {
 };
 
 // 1. Zahlung erstellen
-// 1. Zahlung erstellen
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
-    const { amount, memo } = req.body; // "to" wird hier fest gesetzt
+    const { amount, memo } = req.body; // kein 'to', da fest definiert
 
     if (!amount) return res.status(400).json({ error: "Betrag fehlt" });
 
     const paymentPayload = {
-      amount: amount.toString(), // unbedingt String!
+      amount: amount.toString(), // String erforderlich
       memo: memo || "App to User Zahlung",
-      to: "7b5e0587-e960-4b6c-8808-6c8c00c71632", // hier fest eingetragen
+      userId: "7b5e0587-e960-4b6c-8808-6c8c00c71632", // feste User-ID hier
       metadata: { type: "app-to-user-payment" }
     };
+
+    console.log("Sende Payment Payload an Pi API:", paymentPayload);
 
     const response = await axios.post(
       "https://api.minepi.com/v2/payments",
@@ -63,7 +64,6 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
-
 
 // 2. Zahlung genehmigen
 app.post('/approve-payment', validateApiKey, async (req, res) => {
