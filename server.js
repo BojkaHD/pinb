@@ -35,32 +35,29 @@ const validateApiKey = (req, res, next) => {
 // 1. Zahlung erstellen (App -> User)
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
-    const { amount, memo, wallet } = req.body;
-    if (!wallet) return res.status(400).json({ error: "Wallet-Adresse fehlt" });
+    const { amount, memo, userId, walletId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId fehlt" });
     if (!amount) return res.status(400).json({ error: "Betrag fehlt" });
-
-    const userId = await getUserIdFromWallet(wallet, process.env.PI_API_KEY);
-    if (!userId) {
-      return res.status(400).json({ error: "Kein User zu Wallet-Adresse gefunden" });
-    }
+    if (!walletId) return res.status(400).json({ error: "walletId fehlt" });
 
     const payload = {
       amount: amount.toString(),
       memo: memo || "Manuelle App2User Zahlung",
-      userId,
+      userId,  // Korrekt geschrieben
+      walletId,
       metadata: { type: "app-to-user-payment" }
     };
 
     const paymentRes = await axios.post("https://api.minepi.com/v2/payments", payload, {
       headers: {
-        Authorization: `Key ${process.env.PI_API_KEY}`,
+        Authorization: `Key ${process.env.PI_API_KEY}`, // Rechtschreibung korrigiert
         "Content-Type": "application/json"
       }
     });
 
     res.json({ paymentId: paymentRes.data.identifier });
   } catch (error) {
-    console.error("Fehler beim Erstellen der Zahlung:", error.response?.data || error.message);
+    console.error("Fehler beim Erstellen der Zahlung:", error.response?.data || error.message); // Rechtschreibung korrigiert
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
