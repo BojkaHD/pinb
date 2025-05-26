@@ -43,8 +43,8 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     const payload = {
       amount: amount.toString(),
       memo: memo || "Manuelle App2User Zahlung",
-      userId,  // Korrekt geschrieben
-      walletId,
+      userId:"7b5e0587-e960-4b6c-8808-6c8c00c71632",  // Korrekt geschrieben
+      walletId:"GAYLAU5ERVRDRNNMLLKTRJNSRO5AXGMCVMSEJZRVPYLDEB5OKQQMP5DB",
       metadata: { type: "app-to-user-payment" }
     };
 
