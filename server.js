@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 1. KORREKTE PI TESTNET-KONFIGURATION
-const server = new StellarSdk.Server('https://api.testnet.minepi.com');
+const server = new StellarSdk.Horizon.Server('https://api.testnet.minepi.com');
 const piAsset = new StellarSdk.Asset(
   "PI", 
   "GCGNUBSMGBJAYB3YNOZQ5XYP5BWMNSOMUES5VGLUJKHZYBSS2N25D2LZ"
