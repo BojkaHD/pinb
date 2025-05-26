@@ -41,7 +41,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     const paymentPayload = {
       amount: amount.toString(), // String erforderlich
       memo: memo || "App to User Zahlung",
-      userId: "7b5e0587-e960-4b6c-8808-6c8c00c71632", // feste User-ID hier
+      userId: "2dab9c07-34ec-4f56-bac1-2a166d735305", // feste User-ID hier
       metadata: { type: "app-to-user-payment" }
     };
 
