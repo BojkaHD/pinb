@@ -42,7 +42,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     const paymentPayload = {
       amount: amount.toString(), // unbedingt String!
       memo: memo || "App to User Zahlung",
-      to: "223554e2-6ac9-4cce-a64a-82e786729ee2", // hier fest eingetragen
+      to: "7b5e0587-e960-4b6c-8808-6c8c00c71632", // hier fest eingetragen
       metadata: { type: "app-to-user-payment" }
     };
 
