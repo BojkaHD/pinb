@@ -14,7 +14,9 @@ const TransactionBuilder = StellarSdk.TransactionBuilder;
 const Operation = StellarSdk.Operation;
 const Asset = StellarSdk.Asset;
 const Memo = StellarSdk.Memo;
-const stellarServer = new StellarSdk.Server("https://api.testnet.minepi.com");
+const { Server } = require("stellar-sdk");
+const stellarServer = new Server("https://api.testnet.minepi.com");
+
 
 // ✅ Testnet-Konfiguration
 const TESTNET_SECRET = process.env.TESTNET_SECRET; // App Wallet (Secret Key)
