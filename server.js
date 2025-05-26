@@ -52,10 +52,15 @@ async function getUserIdFromWallet(walletAddress) {
 // Zahlung erstellen
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
-    const { amount, memo, userId } = req.body;
+    const { amount, memo, wallet } = req.body;
 
-    if (!userId) return res.status(400).json({ error: "Wallet-Adresse fehlt" });
+    if (!wallet) return res.status(400).json({ error: "Wallet-Adresse fehlt" });
     if (!amount) return res.status(400).json({ error: "Betrag fehlt" });
+
+    const userId = await getUserIdFromWallet(wallet);
+    if (!userId) {
+      return res.status(400).json({ error: "Kein User zu Wallet-Adresse gefunden" });
+    }
 
     const payload = {
       amount: amount.toString(),
