@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const axios = require('axios');
+const StellarSdk = require('stellar-sdk');
+const Server = new StellarSdk.Server("https://api.testnet.minepi.com");
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
