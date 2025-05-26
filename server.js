@@ -10,18 +10,18 @@ const PORT = process.env.PORT || 3000;
 
 const { Keypair, Server, Networks, TransactionBuilder, Operation, Asset, Memo } = StellarSdk;
 
-// Testnet-Konfiguration
-const TESTNET_SECRET = process.env.TESTNET_SECRET; // Sender (App Wallet)
+// ✅ Testnet-Konfiguration
+const TESTNET_SECRET = process.env.TESTNET_SECRET; // App Wallet (Secret Key)
 const SOURCE_KEYPAIR = Keypair.fromSecret(TESTNET_SECRET);
-const server = new Server("https://api.testnet.minepi.com");
+const stellarServer = new Server("https://api.testnet.minepi.com");
 
-// ✅ Erlaubte Domains (Frontend + Pi-Sandbox)
+// ✅ Erlaubte Domains
 const allowedOrigins = [
   'https://pinb.app',
   'https://sandbox.minepi.com'
 ];
 
-// 🔒 CORS-Sicherheit
+// ✅ CORS
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
@@ -34,7 +34,7 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
-// 🔍 API-Key Validierung Middleware
+// ✅ API-Key Middleware
 const validateApiKey = (req, res, next) => {
   if (!process.env.PI_API_KEY) {
     return res.status(500).json({ error: "PI_API_KEY nicht konfiguriert" });
@@ -42,12 +42,12 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
-// ✅ Testzahlung (direkt über Stellar)
+// ✅ Zahlung erstellen (App → User)
 app.post('/create-payment', async (req, res) => {
   try {
     const { amount, memo, to } = req.body;
-    const account = await server.loadAccount(SOURCE_KEYPAIR.publicKey());
-    const fee = await server.fetchBaseFee();
+    const account = await stellarServer.loadAccount(SOURCE_KEYPAIR.publicKey());
+    const fee = await stellarServer.fetchBaseFee();
 
     const tx = new TransactionBuilder(account, {
       fee,
@@ -63,7 +63,8 @@ app.post('/create-payment', async (req, res) => {
       .build();
 
     tx.sign(SOURCE_KEYPAIR);
-    const result = await server.submitTransaction(tx);
+    const result = await stellarServer.submitTransaction(tx);
+
     res.json({ paymentId: result.id, hash: result.hash });
   } catch (error) {
     console.error("❌ Zahlungsfehler:", error.response?.data || error.message);
@@ -71,7 +72,7 @@ app.post('/create-payment', async (req, res) => {
   }
 });
 
-// ✅ Pi SDK: Zahlung genehmigen
+// ✅ Zahlung genehmigen
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId } = req.body;
@@ -97,7 +98,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-// ✅ Pi SDK: Zahlung abschließen
+// ✅ Zahlung abschließen
 app.post('/complete-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId, txid } = req.body;
@@ -149,7 +150,7 @@ app.post('/cancel-payment', validateApiKey, async (req, res) => {
   }
 });
 
-// 🛠️ Debug: Status erzwingen
+// 🛠️ Debug: Manuelle Status-Korrektur
 app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId } = req.body;
@@ -188,7 +189,7 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-// 🏁 Start
+// ✅ Server starten
 app.listen(PORT, () => {
   console.log(`🚀 Backend aktiv auf Port ${PORT}`);
   console.log(`🔐 API-Key: ${process.env.PI_API_KEY ? "✅ Konfiguriert" : "❌ Fehlt!"}`);
