@@ -34,6 +34,43 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
+// server.js
+const { Keypair, Server, Networks, TransactionBuilder, Operation, Asset } = require("stellar-sdk");
+
+const TESTNET_SECRET = process.env.TESTNET_SECRET; // App-Wallet (Sender)
+const server = new Server("https://api.testnet.minepi.com");
+
+app.post('/create-payment', async (req, res) => {
+  try {
+    const { amount, memo, to } = req.body;
+    const senderKeypair = Keypair.fromSecret(TESTNET_SECRET);
+    const account = await server.loadAccount(senderKeypair.publicKey());
+
+    const fee = await server.fetchBaseFee();
+    const transaction = new TransactionBuilder(account, {
+      fee,
+      networkPassphrase: Networks.TESTNET,
+      memo: memo ? Memo.text(memo) : undefined,
+    })
+      .addOperation(Operation.payment({
+        destination: to,
+        asset: Asset.native(),
+        amount: amount.toString()
+      }))
+      .setTimeout(30)
+      .build();
+
+    transaction.sign(senderKeypair);
+    const result = await server.submitTransaction(transaction);
+
+    res.json({ paymentId: result.id, hash: result.hash });
+  } catch (error) {
+    console.error("❌ Zahlungsfehler:", error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // ✅ Zahlung genehmigen (Developer Approval)
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
