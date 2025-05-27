@@ -1,12 +1,15 @@
 import express from 'express';
 import axios from 'axios';
 import bodyParser from 'body-parser';
+import dotenv from 'dotenv';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Dein Server API-Key (Testnet)
-const PI_API_KEY = import.meta.env.PI_API_KEY;
+dotenv.config();
+
+const PI_API_KEY = process.env.PI_API_KEY;
+
 
 app.use(bodyParser.json());
 
