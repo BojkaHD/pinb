@@ -11,6 +11,7 @@ dotenv.config();
 const PI_API_KEY = process.env.PI_API_KEY;
 const APP_SECRET_KEY = process.env.APP_SECRET_KEY;
 
+app.set('trust proxy', true);  // Wichtig für korrekte IP/Header-Weiterleitung
 
 app.use(bodyParser.json());
 
@@ -31,7 +32,7 @@ app.post('/create-payment', async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Key ${APP_SECRET_KEY}`, // <- das hier ist der App Wallet Key
+          Authorization: `Key ${PI_API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
