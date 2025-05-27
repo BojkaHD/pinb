@@ -2,6 +2,15 @@ import express from 'express';
 import axios from 'axios';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
+
+// Hilfsfunktion zur Signaturvalidierung
+function validateSignature(body, signature, secret) {
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(JSON.stringify(body));
+  const digest = hmac.digest('hex');
+  return digest === signature;
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -49,9 +58,11 @@ app.post('/create-payment', async (req, res) => {
  * 2. Payment genehmigt (Client or Pi calls you here)
  */
 app.post('/approve-payment', (req, res) => {
-  const payment = req.body;
-  console.log('✅ Payment approved:', payment);
-  res.status(200).send('Payment approved received');
+  const signature = req.headers['x-pi-signature'];
+  if (!validateSignature(req.body, signature, APP_SECRET_KEY)) {
+    console.error('⚠️ Ungültige Signatur!');
+    return res.status(403).send('Unauthorized');
+    }
 });
 
 /**
