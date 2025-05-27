@@ -3,7 +3,7 @@ import axios from 'axios';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import cors from 'cors';  // CORS hinzugefügt
+import cors from 'cors';
 
 // Hilfsfunktion zur Signaturvalidierung
 function validateSignature(body, signature, secret) {
@@ -42,8 +42,7 @@ app.use(bodyParser.json({
 app.post('/create-payment', async (req, res) => {
   try {
     const { to_username, amount, memo, metadata } = req.body;
-    
-    // Validierung der Eingabedaten
+
     if (!to_username || !amount) {
       return res.status(400).json({ error: 'Fehlende Pflichtfelder' });
     }
@@ -64,8 +63,8 @@ app.post('/create-payment', async (req, res) => {
       }
     );
 
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       payment: response.data,
       payment_id: response.data.identifier
     });
@@ -73,7 +72,7 @@ app.post('/create-payment', async (req, res) => {
   } catch (err) {
     const error = err.response?.data || err.message;
     console.error('❌ Fehler bei /create-payment:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Zahlung fehlgeschlagen',
       details: error
     });
@@ -86,7 +85,7 @@ app.post('/create-payment', async (req, res) => {
 app.post('/approve-payment', (req, res) => {
   try {
     const signature = req.headers['x-pi-signature'];
-    
+
     if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
       console.error('⚠️ Ungültige Signatur!');
       return res.status(403).json({ error: 'Unauthorized' });
@@ -94,10 +93,8 @@ app.post('/approve-payment', (req, res) => {
 
     const payment = req.body;
     console.log('✅ Payment approved:', payment);
-    
-    // Hier weitere Logik implementieren (z.B. Datenbank-Update)
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       status: 'approved',
       payment_id: payment.identifier
     });
@@ -113,16 +110,14 @@ app.post('/approve-payment', (req, res) => {
  */
 app.post('/complete-payment', (req, res) => {
   const signature = req.headers['x-pi-signature'];
-  
+
   if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
   const payment = req.body;
   console.log('✅ Payment completed:', payment);
-  
-  // Hier weitere Logik implementieren
-  
+
   res.status(200).json({
     status: 'completed',
     payment_id: payment.identifier
@@ -130,14 +125,43 @@ app.post('/complete-payment', (req, res) => {
 });
 
 /**
- * Weitere Webhook-Endpunkte (analog implementieren)
+ * Test-Endpunkt für Sandbox-Zahlung mit festen Werten
  */
+app.post('/test-payment', async (req, res) => {
+  try {
+    const response = await axios.post('https://sandbox.minepi.com/v2/payments', {
+      amount: '1',
+      memo: 'Test',
+      to_username: 'v1etx'
+    }, {
+      headers: {
+        Authorization: `Key ${PI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
 
+    res.status(200).json({
+      success: true,
+      response: response.data
+    });
+  } catch (err) {
+    const error = err.response?.data || err.message;
+    console.error('❌ Fehler bei /test-payment:', error);
+    res.status(500).json({
+      error: 'Zahlung fehlgeschlagen',
+      details: error
+    });
+  }
+});
+
+/**
+ * Status-Check
+ */
 app.get('/', (req, res) => {
   res.json({
     status: 'running',
     version: '1.0.0',
-    endpoints: ['/create-payment', '/approve-payment', '/complete-payment']
+    endpoints: ['/create-payment', '/approve-payment', '/complete-payment', '/test-payment']
   });
 });
 
