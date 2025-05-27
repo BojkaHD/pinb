@@ -6,7 +6,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Dein Server API-Key (Testnet)
-const PI_API_KEY = 'YOUR_TESTNET_API_KEY';
+const PI_API_KEY = 'mdmbohhkri1dov9elqtrxxyel0vz4takljuzljikhd97ppn0nhxzmdie8u1raenk';
 
 app.use(bodyParser.json());
 
