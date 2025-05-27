@@ -1,24 +1,29 @@
 import express from 'express';
 import axios from 'axios';
-import dotenv from 'dotenv';
+import bodyParser from 'body-parser';
 
-dotenv.config();
 const app = express();
-app.use(express.json());
+const port = process.env.PORT || 3000;
 
-const PI_API_KEY = process.env.PI_API_KEY;
+// Dein Server API-Key (Testnet)
+const PI_API_KEY = 'YOUR_TESTNET_API_KEY';
 
-app.post('/send-testnet-payment', async (req, res) => {
-  const { username, amount, memo } = req.body;
+app.use(bodyParser.json());
+
+/**
+ * 1. Payment erstellen (App initiates AppToUser or UserToApp)
+ */
+app.post('/create-payment', async (req, res) => {
+  const { to_username, amount, memo, metadata } = req.body;
 
   try {
     const response = await axios.post(
       'https://sandbox.minepi.com/v2/payments',
       {
-        amount: amount || 0.01,
-        memo: memo || 'Testzahlung',
-        metadata: { testnet: true },
-        to_username: username,
+        amount,
+        memo,
+        metadata,
+        to_username
       },
       {
         headers: {
@@ -28,17 +33,65 @@ app.post('/send-testnet-payment', async (req, res) => {
       }
     );
 
-    res.status(200).json({
-      message: `Zahlung an ${username} erfolgreich.`,
-      data: response.data,
-    });
-  } catch (error) {
-    console.error(error?.response?.data || error.message);
-    res.status(500).json({ error: 'Fehler bei der Zahlung', details: error?.response?.data || error.message });
+    res.status(200).json({ success: true, payment: response.data });
+  } catch (err) {
+    console.error('❌ Error in /create-payment:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Payment creation failed' });
   }
 });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`✅ Server läuft auf Port ${PORT}`);
+/**
+ * 2. Payment genehmigt (Client or Pi calls you here)
+ */
+app.post('/approve-payment', (req, res) => {
+  const payment = req.body;
+  console.log('✅ Payment approved:', payment);
+  res.status(200).send('Payment approved received');
+});
+
+/**
+ * 3. Payment abgeschlossen
+ */
+app.post('/complete-payment', (req, res) => {
+  const payment = req.body;
+  console.log('✅ Payment completed:', payment);
+  res.status(200).send('Payment completed received');
+});
+
+/**
+ * 4. Zahlung abgebrochen
+ */
+app.post('/cancelled-payment', (req, res) => {
+  const payment = req.body;
+  console.log('⚠️ Payment cancelled:', payment);
+  res.status(200).send('Payment cancelled received');
+});
+
+/**
+ * 5. Zahlung nicht abgeschlossen
+ */
+app.post('/incomplete-payment', (req, res) => {
+  const payment = req.body;
+  console.log('⚠️ Payment incomplete:', payment);
+  res.status(200).send('Payment incomplete received');
+});
+
+/**
+ * 6. Zahlung ausstehend
+ */
+app.post('/pending-payment', (req, res) => {
+  const payment = req.body;
+  console.log('⏳ Payment pending:', payment);
+  res.status(200).send('Payment pending received');
+});
+
+/**
+ * Test-Route
+ */
+app.get('/', (req, res) => {
+  res.send('✅ Pi Payment Backend läuft');
+});
+
+app.listen(port, () => {
+  console.log(`🚀 Server läuft auf http://localhost:${port}`);
 });
