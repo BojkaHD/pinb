@@ -127,7 +127,7 @@ app.post('/complete-payment', (req, res) => {
 /**
  * Test-Endpunkt für Sandbox-Zahlung mit festen Werten
  */
-app.post('/test-payment', async (req, res) => {
+/**app.post('/test-payment', async (req, res) => {
   try {
     const response = await axios.post('https://sandbox.minepi.com/v2/payments', {
       amount: '1',
@@ -153,6 +153,7 @@ app.post('/test-payment', async (req, res) => {
     });
   }
 });
+*/
 
 /**
  * Status-Check

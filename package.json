@@ -20,5 +20,16 @@
   "engines": {
     "node": ">=18.x"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BojkaHD/pinb.git"
+  },
+  "keywords": [],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/BojkaHD/pinb/issues"
+  },
+  "homepage": "https://github.com/BojkaHD/pinb#readme"
 }
