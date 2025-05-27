@@ -9,6 +9,7 @@ const port = process.env.PORT || 3000;
 dotenv.config();
 
 const PI_API_KEY = process.env.PI_API_KEY;
+const APP_SECRET_KEY = process.env.APP_SECRET_KEY;
 
 
 app.use(bodyParser.json());
@@ -30,16 +31,16 @@ app.post('/create-payment', async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Bearer ${PI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
+          Authorization: `Key ${APP_SECRET_KEY}`, // <- das hier ist der App Wallet Key
+          'Content-Type': 'application/json'
+        }
       }
     );
 
     res.status(200).json({ success: true, payment: response.data });
   } catch (err) {
-    console.error('❌ Error in /create-payment:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Payment creation failed' });
+    console.error('❌ Fehler bei /create-payment:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Zahlung fehlgeschlagen' });
   }
 });
 
