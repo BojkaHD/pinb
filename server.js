@@ -3,6 +3,7 @@ import axios from 'axios';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import cors from 'cors';  // CORS hinzugefügt
 
 // Hilfsfunktion zur Signaturvalidierung
 function validateSignature(body, signature, secret) {
@@ -20,23 +21,39 @@ dotenv.config();
 const PI_API_KEY = process.env.PI_API_KEY;
 const APP_SECRET_KEY = process.env.APP_SECRET_KEY;
 
-app.set('trust proxy', true);  // Wichtig für korrekte IP/Header-Weiterleitung
+// Middleware-Konfiguration
+app.set('trust proxy', true);
+app.use(cors({
+  origin: '*',
+  methods: ['POST', 'GET', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-pi-signature']
+}));
 
-app.use(bodyParser.json());
+// Body-Parser mit raw-Body-Speicherung für Signaturvalidierung
+app.use(bodyParser.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
 
 /**
- * 1. Payment erstellen (App initiates AppToUser or UserToApp)
+ * 1. Payment erstellen
  */
 app.post('/create-payment', async (req, res) => {
-  const { to_username, amount, memo, metadata } = req.body;
-
   try {
+    const { to_username, amount, memo, metadata } = req.body;
+    
+    // Validierung der Eingabedaten
+    if (!to_username || !amount) {
+      return res.status(400).json({ error: 'Fehlende Pflichtfelder' });
+    }
+
     const response = await axios.post(
       'https://sandbox.minepi.com/v2/payments',
       {
         amount,
-        memo,
-        metadata,
+        memo: memo || 'Standard-Memo',
+        metadata: metadata || {},
         to_username
       },
       {
@@ -47,67 +64,85 @@ app.post('/create-payment', async (req, res) => {
       }
     );
 
-    res.status(200).json({ success: true, payment: response.data });
+    res.status(200).json({ 
+      success: true, 
+      payment: response.data,
+      payment_id: response.data.identifier
+    });
+
   } catch (err) {
-    console.error('❌ Fehler bei /create-payment:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Zahlung fehlgeschlagen' });
+    const error = err.response?.data || err.message;
+    console.error('❌ Fehler bei /create-payment:', error);
+    res.status(500).json({ 
+      error: 'Zahlung fehlgeschlagen',
+      details: error
+    });
   }
 });
 
 /**
- * 2. Payment genehmigt (Client or Pi calls you here)
+ * 2. Payment genehmigt (Webhook)
  */
 app.post('/approve-payment', (req, res) => {
-  const signature = req.headers['x-pi-signature'];
-  if (!validateSignature(req.body, signature, APP_SECRET_KEY)) {
-    console.error('⚠️ Ungültige Signatur!');
-    return res.status(403).send('Unauthorized');
+  try {
+    const signature = req.headers['x-pi-signature'];
+    
+    if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
+      console.error('⚠️ Ungültige Signatur!');
+      return res.status(403).json({ error: 'Unauthorized' });
     }
+
+    const payment = req.body;
+    console.log('✅ Payment approved:', payment);
+    
+    // Hier weitere Logik implementieren (z.B. Datenbank-Update)
+    
+    res.status(200).json({ 
+      status: 'approved',
+      payment_id: payment.identifier
+    });
+
+  } catch (err) {
+    console.error('❌ Fehler bei /approve-payment:', err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
 });
 
 /**
- * 3. Payment abgeschlossen
+ * 3. Payment abgeschlossen (Webhook)
  */
 app.post('/complete-payment', (req, res) => {
+  const signature = req.headers['x-pi-signature'];
+  
+  if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
   const payment = req.body;
   console.log('✅ Payment completed:', payment);
-  res.status(200).send('Payment completed received');
+  
+  // Hier weitere Logik implementieren
+  
+  res.status(200).json({
+    status: 'completed',
+    payment_id: payment.identifier
+  });
 });
 
 /**
- * 4. Zahlung abgebrochen
+ * Weitere Webhook-Endpunkte (analog implementieren)
  */
-app.post('/cancelled-payment', (req, res) => {
-  const payment = req.body;
-  console.log('⚠️ Payment cancelled:', payment);
-  res.status(200).send('Payment cancelled received');
-});
 
-/**
- * 5. Zahlung nicht abgeschlossen
- */
-app.post('/incomplete-payment', (req, res) => {
-  const payment = req.body;
-  console.log('⚠️ Payment incomplete:', payment);
-  res.status(200).send('Payment incomplete received');
-});
-
-/**
- * 6. Zahlung ausstehend
- */
-app.post('/pending-payment', (req, res) => {
-  const payment = req.body;
-  console.log('⏳ Payment pending:', payment);
-  res.status(200).send('Payment pending received');
-});
-
-/**
- * Test-Route
- */
 app.get('/', (req, res) => {
-  res.send('✅ Pi Payment Backend läuft');
+  res.json({
+    status: 'running',
+    version: '1.0.0',
+    endpoints: ['/create-payment', '/approve-payment', '/complete-payment']
+  });
 });
 
 app.listen(port, () => {
   console.log(`🚀 Server läuft auf http://localhost:${port}`);
+  console.log('PI_API_KEY vorhanden:', !!PI_API_KEY);
+  console.log('APP_SECRET_KEY vorhanden:', !!APP_SECRET_KEY);
 });
