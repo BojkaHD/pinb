@@ -21,7 +21,6 @@
     "node": ">=18.x"
   },
   "license": "MIT",
-  "devDependencies": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BojkaHD/pinb.git"
