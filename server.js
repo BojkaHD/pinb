@@ -1,51 +1,204 @@
-import express from 'express';
-import axios from 'axios';
-import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
-import crypto from 'crypto';
-import cors from 'cors';
-
-dotenv.config();
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const axios = require('axios');
 
 const app = express();
-const port = process.env.PORT || 3000;
-const SECRET = process.env.APP_SECRET_KEY_TESTNET;
-const API_KEY = process.env.PI_API_KEY_TESTNET;
-const PI_API_BASE = process.env.PI_NETWORK === 'mainnet'
-  ? 'https://api.minepi.com'
-  : 'https://sandbox.minepi.com';
+const PORT = process.env.PORT || 3000;
 
-function validateSignature(rawBody, signature, secret) {
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(rawBody);
-  return hmac.digest('hex') === signature;
-}
+// ✅ Erlaubte Domains (Frontend + Pi-Sandbox)
+const allowedOrigins = [
+  'https://pinb.app',
+  'https://sandbox.minepi.com'
+];
 
-app.use(cors());
-app.use(bodyParser.json({
-  verify: (req, res, buf) => req.rawBody = buf
+// 🔒 CORS-Sicherheit
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+      callback(null, true);
+    } else {
+      callback(new Error(`🚫 Blockierter Origin: ${origin}`));
+    }
+  }
 }));
 
-app.post('/approve-payment', (req, res) => {
-  const sig = req.headers['x-pi-signature'];
-  if (!validateSignature(req.rawBody, sig, SECRET)) {
-    return res.status(403).json({ error: "Invalid signature" });
+app.use(bodyParser.json());
+
+// 🔍 API-Key Validierung Middleware
+const validateApiKey = (req, res, next) => {
+  if (!process.env.PI_API_KEY_TESTNET) {
+    return res.status(500).json({ error: "PI_API_KEY_TESTNET nicht konfiguriert" });
   }
-  res.status(200).json({ status: "approved", payment_id: req.body.identifier });
-});
+  next();
+};
 
-app.post('/complete-payment', (req, res) => {
-  const sig = req.headers['x-pi-signature'];
-  if (!validateSignature(req.rawBody, sig, SECRET)) {
-    return res.status(403).json({ error: "Invalid signature" });
+// ✅ Zahlung genehmigen (Developer Approval)
+app.post('/approve-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId } = req.body;
+    if (!paymentId) throw new Error("paymentId fehlt");
+
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+      {},
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.json({ 
+      status: 'approved',
+      piData: response.data 
+    });
+
+  } catch (error) {
+    const piError = error.response?.data || error.message;
+    console.error("APPROVE ERROR:", piError);
+    res.status(error.response?.status || 500).json({ error: piError });
   }
-  res.status(200).json({ status: "completed", payment_id: req.body.identifier });
 });
 
-app.get('/', (req, res) => {
-  res.json({ status: 'OK', env: process.env.PI_NETWORK });
+// ✅ Zahlung abschließen (mit Blockchain TXID)
+app.post('/complete-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId, txid } = req.body;
+    if (!paymentId || !txid) throw new Error("paymentId/txid fehlt");
+
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      { txid },
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.json({ 
+      status: 'completed',
+      piData: response.data 
+    });
+
+  } catch (error) {
+    const piError = error.response?.data || error.message;
+    console.error("COMPLETE ERROR:", piError);
+    res.status(error.response?.status || 500).json({ error: piError });
+  }
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Backend läuft auf Port ${port}`);
+// 🚨 Zahlung abbrechen (Nur für Notfälle)
+app.post('/cancel-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId } = req.body;
+    if (!paymentId) throw new Error("paymentId fehlt");
+
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/cancel`,
+      {},
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.json({ 
+      status: 'cancelled',
+      piData: response.data 
+    });
+
+  } catch (error) {
+    const piError = error.response?.data?.error_message || error.message;
+    console.error("CANCEL ERROR:", piError);
+    res.status(error.response?.status || 500).json({ error: piError });
+  }
+});
+
+// 🛠️ Debug-Endpunkt für hängige Zahlungen
+app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId } = req.body;
+    if (!paymentId) throw new Error("paymentId fehlt");
+
+    // 1. Status prüfen
+    const statusCheck = await axios.get(
+      `https://api.minepi.com/v2/payments/${paymentId}`,
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`
+        }
+      }
+    );
+    // 2. Je nach Status handeln
+    const paymentStatus = statusCheck.data.status;
+    let action = 'none';
+
+    if (paymentStatus.developer_approved === false) {
+      await axios.post(`https://api.minepi.com/v2/payments/${paymentId}/approve`, {}, { 
+        headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` } 
+      });
+      action = 'approved';
+    }
+
+    if (paymentStatus.transaction_verified === true && paymentStatus.developer_completed === false) {
+      await axios.post(`https://api.minepi.com/v2/payments/${paymentId}/complete`, { txid: "MANUAL_OVERRIDE" }, { 
+        headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` } 
+      });
+      action = 'completed';
+    }
+
+    res.json({
+      status: 'forced_resolution',
+      originalStatus: paymentStatus,
+      actionTaken: action
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      error: error.response?.data || error.message 
+    });
+  }
+});
+
+app.post('/refund-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId, amount } = req.body;
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/refund`,
+      { amount },
+      { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }}
+    );
+    res.json({ refundStatus: 'success', data: response.data });
+  } catch (error) {
+    res.status(500).json({ error: error.response?.data?.error_message || "Rückerstattung fehlgeschlagen" });
+  }
+});
+
+app.post('/bulk-cancel', validateApiKey, async (req, res) => {
+  try {
+    const { paymentIds } = req.body; // Array von IDs
+    const results = await Promise.all(
+      paymentIds.map(id => 
+        axios.post(`https://api.minepi.com/v2/payments/${id}/cancel`, {}, {
+          headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }
+        })
+      )
+    );
+    res.json({ cancelled: results.length });
+  } catch (error) {
+    res.status(500).json({ error: "Fehler beim Massenabbruch" });
+  }
+});
+
+// 🏁 Server starten
+app.listen(PORT, () => {
+  console.log(`🚀 Backend aktiv auf Port ${PORT}`);
+  console.log(`🔐 API-Key: ${process.env.PI_API_KEY_TESTNET ? "✅ Konfiguriert" : "❌ Fehlt!"}`);
 });
