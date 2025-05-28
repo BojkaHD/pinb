@@ -5,149 +5,47 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import cors from 'cors';
 
-// Hilfsfunktion zur Signaturvalidierung (KORRIGIERT)
-function validateSignature(rawBody, signature, secret) {
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(rawBody);
-  const digest = hmac.digest('hex');
-  return digest === signature;
-}
+dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
-
-dotenv.config();
-
-const PI_API_KEY_TESTNET = process.env.PI_API_KEY_TESTNET;
-const APP_SECRET_KEY_TESTNET = process.env.APP_SECRET_KEY_TESTNET;
-
-// API-URL basierend auf Umgebung (KORRIGIERT)
-const PI_API_BASE = process.env.PI_NETWORK === 'mainnet' 
-  ? 'https://api.minepi.com' 
+const SECRET = process.env.APP_SECRET_KEY_TESTNET;
+const API_KEY = process.env.PI_API_KEY_TESTNET;
+const PI_API_BASE = process.env.PI_NETWORK === 'mainnet'
+  ? 'https://api.minepi.com'
   : 'https://sandbox.minepi.com';
 
-// Middleware-Konfiguration
-app.set('trust proxy', true);
-app.use(cors({
-  origin: '*',
-  methods: ['POST', 'GET', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'x-pi-signature']
-}));
+function validateSignature(rawBody, signature, secret) {
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(rawBody);
+  return hmac.digest('hex') === signature;
+}
 
-// Body-Parser mit raw-Body-Speicherung für Signaturvalidierung (KORRIGIERT)
+app.use(cors());
 app.use(bodyParser.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf;
-  }
+  verify: (req, res, buf) => req.rawBody = buf
 }));
 
-/**
- * 1. Payment erstellen (KORRIGIERTE URL)
- */
-app.post('/create-payment', async (req, res) => {
-  try {
-    const { to, amount, memo, metadata } = req.body;  // Geändert: to statt to_username
-
-    if (!to || !amount) {
-      return res.status(400).json({ error: 'Fehlende Pflichtfelder (to, amount)' });
-    }
-
-    const response = await axios.post(
-      `${PI_API_BASE}/v2/payments`,
-      {
-        amount,
-        memo: memo || 'Standard-Memo',
-        metadata: metadata || {},
-        to  // Geändert: to statt to_username
-      },
-      {
-        headers: {
-          Authorization: `Key ${PI_API_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    res.status(200).json({
-      success: true,
-      payment: response.data,
-      payment_id: response.data.identifier
-    });
-
-  } catch (err) {
-    const error = err.response?.data || err.message;
-    console.error('❌ Fehler bei /create-payment:', error);
-    res.status(500).json({
-      error: 'Zahlung fehlgeschlagen',
-      details: error
-    });
-  }
-});
-
-/**
- * 2. Payment genehmigt (Webhook) (KORRIGIERTE SIGNATURVALIDIERUNG)
- */
 app.post('/approve-payment', (req, res) => {
-  try {
-    const signature = req.headers['x-pi-signature'];
-
-    // Korrekte Verwendung von rawBody (Buffer)
-    if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY_TESTNET)) {
-      console.error('⚠️ Ungültige Signatur!');
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    const payment = req.body;
-    console.log('✅ Payment approved:', payment.identifier);
-
-    res.status(200).json({
-      status: 'approved',
-      payment_id: payment.identifier
-    });
-
-  } catch (err) {
-    console.error('❌ Fehler bei /approve-payment:', err);
-    res.status(500).json({ error: 'Serverfehler' });
+  const sig = req.headers['x-pi-signature'];
+  if (!validateSignature(req.rawBody, sig, SECRET)) {
+    return res.status(403).json({ error: "Invalid signature" });
   }
+  res.status(200).json({ status: "approved", payment_id: req.body.identifier });
 });
 
-/**
- * 3. Payment abgeschlossen (Webhook) (KORRIGIERTE SIGNATURVALIDIERUNG)
- */
 app.post('/complete-payment', (req, res) => {
-  const signature = req.headers['x-pi-signature'];
-
-  // Korrekte Verwendung von rawBody (Buffer)
-  if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY_TESTNET_TESTNET)) {
-    console.error('⚠️ Ungültige Signatur!');
-    return res.status(403).json({ error: 'Unauthorized' });
+  const sig = req.headers['x-pi-signature'];
+  if (!validateSignature(req.rawBody, sig, SECRET)) {
+    return res.status(403).json({ error: "Invalid signature" });
   }
-
-  const payment = req.body;
-  console.log('✅ Payment completed:', payment.identifier);
-
-  res.status(200).json({
-    status: 'completed',
-    payment_id: payment.identifier
-  });
+  res.status(200).json({ status: "completed", payment_id: req.body.identifier });
 });
 
-/**
- * Status-Check
- */
 app.get('/', (req, res) => {
-  res.json({
-    status: 'running',
-    version: '1.0.0',
-    environment: process.env.PI_NETWORK || 'sandbox',
-    endpoints: ['/create-payment', '/approve-payment', '/complete-payment']
-  });
+  res.json({ status: 'OK', env: process.env.PI_NETWORK });
 });
 
 app.listen(port, () => {
-  console.log(`🚀 Server läuft auf http://localhost:${port}`);
-  console.log('PI_API_KEY_TESTNET vorhanden:', !!PI_API_KEY_TESTNET);
-  console.log('APP_SECRET_KEY_TESTNET vorhanden:', !!APP_SECRET_KEY_TESTNET);
-  console.log('PI_NETWORK:', process.env.PI_NETWORK || 'sandbox');
-  console.log('API_BASE:', PI_API_BASE);
+  console.log(`🚀 Backend läuft auf Port ${port}`);
 });
