@@ -5,20 +5,26 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import cors from 'cors';
 
-// Initialisiere Umgebungsvariablen
-dotenv.config();
+// Hilfsfunktion zur Signaturvalidierung (KORRIGIERT)
+function validateSignature(rawBody, signature, secret) {
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(rawBody);
+  const digest = hmac.digest('hex');
+  return digest === signature;
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Umgebungsvariablen (bleiben bei ihren ursprünglichen Namen)
-const PI_API_KEY_TESTNET = process.env.PI_API_KEY_TESTNET;
-const APP_SECRET_KEY_TESTNET = process.env.APP_SECRET_KEY_TESTNET;
+dotenv.config();
 
-// API-URL Konfiguration
+const PI_API_KEY = process.env.PI_API_KEY;
+const APP_SECRET_KEY = process.env.APP_SECRET_KEY;
+
+// API-URL basierend auf Umgebung (KORRIGIERT)
 const PI_API_BASE = process.env.PI_NETWORK === 'mainnet' 
   ? 'https://api.minepi.com' 
-  : 'https://api.testnet.minepi.com';  // Korrigierte Testnet-URL
+  : 'https://sandbox.minepi.com';
 
 // Middleware-Konfiguration
 app.set('trust proxy', true);
@@ -28,31 +34,19 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'x-pi-signature']
 }));
 
-// Body-Parser mit raw-Body-Speicherung für Signaturvalidierung
+// Body-Parser mit raw-Body-Speicherung für Signaturvalidierung (KORRIGIERT)
 app.use(bodyParser.json({
   verify: (req, res, buf) => {
     req.rawBody = buf;
   }
 }));
 
-// Hilfsfunktion zur Signaturvalidierung (vollständig korrigiert)
-function validateSignature(rawBody, signature, secret) {
-  if (!secret) {
-    throw new Error("APP_SECRET_KEY_TESTNET ist nicht definiert");
-  }
-  
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(rawBody);
-  const digest = hmac.digest('hex');
-  return digest === signature;
-}
-
 /**
- * 1. Payment erstellen
+ * 1. Payment erstellen (KORRIGIERTE URL)
  */
 app.post('/create-payment', async (req, res) => {
   try {
-    const { to, amount, memo, metadata } = req.body;
+    const { to, amount, memo, metadata } = req.body;  // Geändert: to statt to_username
 
     if (!to || !amount) {
       return res.status(400).json({ error: 'Fehlende Pflichtfelder (to, amount)' });
@@ -64,11 +58,11 @@ app.post('/create-payment', async (req, res) => {
         amount,
         memo: memo || 'Standard-Memo',
         metadata: metadata || {},
-        to
+        to  // Geändert: to statt to_username
       },
       {
         headers: {
-          Authorization: `Key ${PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
@@ -91,26 +85,20 @@ app.post('/create-payment', async (req, res) => {
 });
 
 /**
- * 2. Payment genehmigt (Webhook)
+ * 2. Payment genehmigt (Webhook) (KORRIGIERTE SIGNATURVALIDIERUNG)
  */
 app.post('/approve-payment', (req, res) => {
   try {
     const signature = req.headers['x-pi-signature'];
-    
-    if (!signature) {
-      return res.status(401).json({ error: 'Signatur-Header fehlt' });
-    }
-    
-    if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY_TESTNET)) {
-      console.error('⚠️ Ungültige Signatur! Erwartet vs Empfangen:');
-      return res.status(403).json({ error: 'Unauthorized - Signatur ungültig' });
+
+    // Korrekte Verwendung von rawBody (Buffer)
+    if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
+      console.error('⚠️ Ungültige Signatur!');
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
     const payment = req.body;
     console.log('✅ Payment approved:', payment.identifier);
-
-    // Hier würdest du die Zahlung in deiner DB speichern
-    // z.B.: database.savePayment(payment);
 
     res.status(200).json({
       status: 'approved',
@@ -119,73 +107,47 @@ app.post('/approve-payment', (req, res) => {
 
   } catch (err) {
     console.error('❌ Fehler bei /approve-payment:', err);
-    res.status(500).json({ error: 'Serverfehler', details: err.message });
+    res.status(500).json({ error: 'Serverfehler' });
   }
 });
 
 /**
- * 3. Payment abgeschlossen (Webhook)
+ * 3. Payment abgeschlossen (Webhook) (KORRIGIERTE SIGNATURVALIDIERUNG)
  */
 app.post('/complete-payment', (req, res) => {
-  try {
-    const signature = req.headers['x-pi-signature'];
-    
-    if (!signature) {
-      return res.status(401).json({ error: 'Signatur-Header fehlt' });
-    }
-    
-    if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY_TESTNET)) {
-      console.error('⚠️ Ungültige Signatur!');
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
+  const signature = req.headers['x-pi-signature'];
 
-    const payment = req.body;
-    console.log('✅ Payment completed:', payment.identifier);
-
-    // Hier würdest du die Zahlung in deiner DB als abgeschlossen markieren
-    // z.B.: database.completePayment(payment.identifier);
-
-    res.status(200).json({
-      status: 'completed',
-      payment_id: payment.identifier
-    });
-    
-  } catch (err) {
-    console.error('❌ Fehler bei /complete-payment:', err);
-    res.status(500).json({ error: 'Serverfehler', details: err.message });
+  // Korrekte Verwendung von rawBody (Buffer)
+  if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
+    console.error('⚠️ Ungültige Signatur!');
+    return res.status(403).json({ error: 'Unauthorized' });
   }
+
+  const payment = req.body;
+  console.log('✅ Payment completed:', payment.identifier);
+
+  res.status(200).json({
+    status: 'completed',
+    payment_id: payment.identifier
+  });
 });
 
 /**
- * Status-Check Endpoint
+ * Status-Check
  */
 app.get('/', (req, res) => {
   res.json({
     status: 'running',
     version: '1.0.0',
-    environment: process.env.PI_NETWORK || 'testnet',
-    endpoints: ['/create-payment', '/approve-payment', '/complete-payment'],
-    config: {
-      api_base: PI_API_BASE,
-      api_key_set: !!PI_API_KEY_TESTNET,
-      secret_key_set: !!APP_SECRET_KEY_TESTNET
-    }
+    environment: process.env.PI_NETWORK || 'sandbox',
+    endpoints: ['/create-payment', '/approve-payment', '/complete-payment']
   });
 });
 
-// Server starten
 app.listen(port, () => {
   console.log(`🚀 Server läuft auf http://localhost:${port}`);
-  console.log('-------------------------------------------');
-  console.log('Konfigurationsstatus:');
-  console.log(`PI_API_KEY_TESTNET: ${PI_API_KEY_TESTNET ? 'gesetzt' : 'FEHLT!'}`);
-  console.log(`APP_SECRET_KEY_TESTNET: ${APP_SECRET_KEY_TESTNET ? 'gesetzt' : 'FEHLT!'}`);
-  console.log(`PI_NETWORK: ${process.env.PI_NETWORK || 'testnet (default)'}`);
-  console.log(`API_BASE: ${PI_API_BASE}`);
-  console.log('-------------------------------------------');
-  
-  if (!PI_API_KEY_TESTNET || !APP_SECRET_KEY_TESTNET) {
-    console.error('⚠️ WARNUNG: Essentielle Umgebungsvariablen fehlen!');
-    console.error('Stelle sicher, dass PI_API_KEY_TESTNET und APP_SECRET_KEY_TESTNET in .env gesetzt sind');
-  }
+  console.log('PI_API_KEY vorhanden:', !!PI_API_KEY);
+  console.log('APP_SECRET_KEY vorhanden:', !!APP_SECRET_KEY);
+  console.log('PI_NETWORK:', process.env.PI_NETWORK || 'sandbox');
+  console.log('API_BASE:', PI_API_BASE);
 });
