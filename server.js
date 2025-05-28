@@ -47,7 +47,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     console.log(`[INFO] Starte App-to-User Zahlung ➜ to: ${to}, amount: ${amount}, memo: ${memo || "Standard"}, metadata: ${JSON.stringify(metadata)}`);
 
     const response = await axios.post(
-      `https://sandbox.minepi.com/v2/payments`,
+      `https://api.minepi.com/v2/payments`,
       {
         amount,
         memo: memo || "App-to-User Auszahlung",
@@ -88,7 +88,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     if (!paymentId) throw new Error("paymentId fehlt");
 
     const response = await axios.post(
-      `https://sandbox.minepi.com/v2/payments/${paymentId}/approve`,
+      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
       {
         headers: {
@@ -112,7 +112,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     if (!paymentId || !txid) throw new Error("paymentId/txid fehlt");
 
     const response = await axios.post(
-      `https://sandbox.minepi.com/v2/payments/${paymentId}/complete`,
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
       {
         headers: {
