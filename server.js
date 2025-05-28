@@ -203,7 +203,8 @@ app.post('/refund-payment', validateApiKey, async (req, res) => {
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/refund`,
       { amount },
-      { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }}
+      { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+        'Content-Type': 'application/json' }}
     );
     res.json({ refundStatus: 'success', data: response.data });
   } catch (error) {
