@@ -40,8 +40,11 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     const { to, amount, memo, metadata } = req.body;
 
     if (!to || !amount) {
+      console.warn(`[WARN] Ungültige Anfrage bei /create-payment – to: ${to}, amount: ${amount}`);
       return res.status(400).json({ error: 'Felder "to" und "amount" sind erforderlich' });
     }
+
+    console.log(`[INFO] Starte App-to-User Zahlung ➜ to: ${to}, amount: ${amount}, memo: ${memo || "Standard"}, metadata: ${JSON.stringify(metadata)}`);
 
     const response = await axios.post(
       `https://api.minepi.com/v2/payments`,
@@ -60,6 +63,8 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = response.data;
+
+    console.log(`[SUCCESS] Zahlung erstellt – Payment ID: ${payment.identifier}, Empfänger: ${to}, Betrag: ${amount} Pi`);
     res.status(200).json({
       success: true,
       payment_id: payment.identifier,
@@ -67,11 +72,13 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     });
 
   } catch (error) {
-    const errMsg = error.response?.data || error.message;
-    console.error("CREATE ERROR:", errMsg);
-    res.status(error.response?.status || 500).json({
-      error: errMsg
-    });
+    const errData = error.response?.data || error.message;
+    const statusCode = error.response?.status || 500;
+
+    console.error(`[ERROR] Fehler bei /create-payment ➜ Status ${statusCode}`);
+    console.error(errData);
+
+    res.status(statusCode).json({ error: errData });
   }
 });
 
