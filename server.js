@@ -47,7 +47,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     console.log(`[INFO] Starte App-to-User Zahlung ➜ to: ${to}, amount: ${amount}, memo: ${memo || "Standard"}, metadata: ${JSON.stringify(metadata)}`);
 
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments`,
+      `${PI_API_BASE}/v2/payments`,
       {
         amount,
         memo: memo || "App-to-User Auszahlung",
