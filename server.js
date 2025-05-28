@@ -88,7 +88,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     if (!paymentId) throw new Error("paymentId fehlt");
 
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+      `https://sandbox.minepi.com/v2/payments/${paymentId}/approve`,
       {},
       {
         headers: {
@@ -112,7 +112,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     if (!paymentId || !txid) throw new Error("paymentId/txid fehlt");
 
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      `https://sandbox.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
       {
         headers: {
