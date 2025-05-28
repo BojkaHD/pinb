@@ -4,6 +4,13 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
 
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
 dotenv.config();
 
 const app = express();
@@ -230,25 +237,32 @@ app.post('/bulk-cancel', validateApiKey, async (req, res) => {
   }
 });
 
-app.get('/test-user/:username', validateApiKey, async (req, res) => {
+app.get('/test-user/:username', async (req, res) => {
   const username = req.params.username;
 
+  if (!username) {
+    return res.status(400).json({ error: 'Kein Username angegeben' });
+  }
+
   try {
-    const response = await axios.get(
-      `https://api.minepi.com/v2/users/${username}`,
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`
-        }
-      }
-    );
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('pi_username', username)
+      .single(); // Nur ein Eintrag erwartet
 
-    res.json({ found: true, data: response.data });
+    if (error) {
+      console.error(`[❌] Supabase-Abfragefehler:`, error.message);
+      return res.status(404).json({ found: false, error: 'Benutzer nicht gefunden' });
+    }
 
-  } catch (error) {
-    res.status(404).json({ found: false, error: error.response?.data || error.message });
+    res.json({ found: true, user: data });
+  } catch (err) {
+    console.error(`[❌] Fehler bei /test-user:`, err.message);
+    res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend aktiv auf Port ${PORT}`);
