@@ -18,8 +18,8 @@ const port = process.env.PORT || 3000;
 
 dotenv.config();
 
-const PI_API_KEY = process.env.PI_API_KEY;
-const APP_SECRET_KEY = process.env.APP_SECRET_KEY;
+const PI_API_KEY_TESTNET = process.env.PI_API_KEY_TESTNET;
+const APP_SECRET_KEY_TESTNET = process.env.APP_SECRET_KEY_TESTNET;
 
 // API-URL basierend auf Umgebung (KORRIGIERT)
 const PI_API_BASE = process.env.PI_NETWORK === 'mainnet' 
@@ -62,7 +62,7 @@ app.post('/create-payment', async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Key ${PI_API_KEY}`,
+          Authorization: `Key ${PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
@@ -92,7 +92,7 @@ app.post('/approve-payment', (req, res) => {
     const signature = req.headers['x-pi-signature'];
 
     // Korrekte Verwendung von rawBody (Buffer)
-    if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
+    if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY_TESTNET)) {
       console.error('⚠️ Ungültige Signatur!');
       return res.status(403).json({ error: 'Unauthorized' });
     }
@@ -118,7 +118,7 @@ app.post('/complete-payment', (req, res) => {
   const signature = req.headers['x-pi-signature'];
 
   // Korrekte Verwendung von rawBody (Buffer)
-  if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
+  if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY_TESTNET_TESTNET)) {
     console.error('⚠️ Ungültige Signatur!');
     return res.status(403).json({ error: 'Unauthorized' });
   }
@@ -146,8 +146,8 @@ app.get('/', (req, res) => {
 
 app.listen(port, () => {
   console.log(`🚀 Server läuft auf http://localhost:${port}`);
-  console.log('PI_API_KEY vorhanden:', !!PI_API_KEY);
-  console.log('APP_SECRET_KEY vorhanden:', !!APP_SECRET_KEY);
+  console.log('PI_API_KEY_TESTNET vorhanden:', !!PI_API_KEY_TESTNET);
+  console.log('APP_SECRET_KEY_TESTNET vorhanden:', !!APP_SECRET_KEY_TESTNET);
   console.log('PI_NETWORK:', process.env.PI_NETWORK || 'sandbox');
   console.log('API_BASE:', PI_API_BASE);
 });
