@@ -34,6 +34,47 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
+// 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
+app.post('/create-payment', validateApiKey, async (req, res) => {
+  try {
+    const { to, amount, memo, metadata } = req.body;
+
+    if (!to || !amount) {
+      return res.status(400).json({ error: 'Felder "to" und "amount" sind erforderlich' });
+    }
+
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments`,
+      {
+        amount,
+        memo: memo || "App-to-User Auszahlung",
+        metadata: metadata || {},
+        to
+      },
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const payment = response.data;
+    res.status(200).json({
+      success: true,
+      payment_id: payment.identifier,
+      payment
+    });
+
+  } catch (error) {
+    const errMsg = error.response?.data || error.message;
+    console.error("CREATE ERROR:", errMsg);
+    res.status(error.response?.status || 500).json({
+      error: errMsg
+    });
+  }
+});
+
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId } = req.body;
