@@ -1,173 +1,106 @@
-import express from 'express';
-import axios from 'axios';
-import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
-import crypto from 'crypto';
-import cors from 'cors';
-
-// Hilfsfunktion zur Signaturvalidierung
-function validateSignature(body, signature, secret) {
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(JSON.stringify(body));
-  const digest = hmac.digest('hex');
-  return digest === signature;
-}
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const axios = require('axios');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
-dotenv.config();
+const allowedOrigins = [
+  'https://pinb.app',
+  'https://sandbox.minepi.com',
+];
 
-const PI_API_KEY = process.env.PI_API_KEY;
-const APP_SECRET_KEY = process.env.APP_SECRET_KEY;
-
-// Middleware-Konfiguration
-app.set('trust proxy', true);
 app.use(cors({
-  origin: '*',
-  methods: ['POST', 'GET', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'x-pi-signature']
-}));
-
-// Body-Parser mit raw-Body-Speicherung für Signaturvalidierung
-app.use(bodyParser.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+      callback(null, true);
+    } else {
+      callback(new Error(`🚫 Blockierter Origin: ${origin}`));
+    }
   }
 }));
 
-/**
- * 1. Payment erstellen
- */
-app.post('/create-payment', async (req, res) => {
-  try {
-    const { to_username, amount, memo, metadata } = req.body;
+app.use(bodyParser.json());
 
-    if (!to_username || !amount) {
-      return res.status(400).json({ error: 'Fehlende Pflichtfelder' });
-    }
+// API-Key Middleware
+const validateApiKey = (req, res, next) => {
+  if (!process.env.PI_API_KEY) {
+    return res.status(500).json({ error: "PI_API_KEY nicht konfiguriert" });
+  }
+  next();
+};
+
+// 1. Zahlung erstellen (App -> User)
+app.post('/create-payment', validateApiKey, async (req, res) => {
+  try {
+    const { amount, memo, userId, walletId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId fehlt" });
+    if (!amount) return res.status(400).json({ error: "Betrag fehlt" });
+    if (!walletId) return res.status(400).json({ error: "walletId fehlt" });
+
+    const payload = {
+      amount: amount.toString(),
+      memo: memo || "Manuelle App2User Zahlung",
+      userId:"7b5e0587-e960-4b6c-8808-6c8c00c71632",  // Korrekt geschrieben
+      walletId:"GAYLAU5ERVRDRNNMLLKTRJNSRO5AXGMCVMSEJZRVPYLDEB5OKQQMP5DB",
+      metadata: { type: "app-to-user-payment" }
+    };
+
+    const paymentRes = await axios.post("https://api.minepi.com/v2/payments", payload, {
+      headers: {
+        Authorization: `Key ${process.env.PI_API_KEY}`, // Rechtschreibung korrigiert
+        "Content-Type": "application/json"
+      }
+    });
+
+    res.json({ paymentId: paymentRes.data.identifier });
+  } catch (error) {
+    console.error("Fehler beim Erstellen der Zahlung:", error.response?.data || error.message); // Rechtschreibung korrigiert
+    res.status(500).json({ error: error.response?.data || error.message });
+  }
+});
+
+// 2. Zahlung genehmigen (Developer Approval)
+app.post('/approve-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId } = req.body;
+    if (!paymentId) return res.status(400).json({ error: "paymentId fehlt" });
 
     const response = await axios.post(
-      'https://sandbox.minepi.com/v2/payments',
-      {
-        amount,
-        memo: memo || 'Standard-Memo',
-        metadata: metadata || {},
-        to_username
-      },
-      {
-        headers: {
-          Authorization: `Key ${PI_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      }
+      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+      {},
+      { headers: { Authorization: `Key ${process.env.PI_API_KEY}` } }
     );
 
-    res.status(200).json({
-      success: true,
-      payment: response.data,
-      payment_id: response.data.identifier
-    });
-
-  } catch (err) {
-    const error = err.response?.data || err.message;
-    console.error('❌ Fehler bei /create-payment:', error);
-    res.status(500).json({
-      error: 'Zahlung fehlgeschlagen',
-      details: error
-    });
+    res.json({ status: 'approved', data: response.data });
+  } catch (error) {
+    console.error("Fehler beim Genehmigen der Zahlung:", error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
   }
 });
 
-/**
- * 2. Payment genehmigt (Webhook)
- */
-app.post('/approve-payment', (req, res) => {
+// 3. Zahlung abschließen (Transaction ID angeben)
+app.post('/complete-payment', validateApiKey, async (req, res) => {
   try {
-    const signature = req.headers['x-pi-signature'];
+    const { paymentId, txid } = req.body;
+    if (!paymentId || !txid) return res.status(400).json({ error: "paymentId und txid erforderlich" });
 
-    if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
-      console.error('⚠️ Ungültige Signatur!');
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      { txid },
+      { headers: { Authorization: `Key ${process.env.PI_API_KEY}` } }
+    );
 
-    const payment = req.body;
-    console.log('✅ Payment approved:', payment);
-
-    res.status(200).json({
-      status: 'approved',
-      payment_id: payment.identifier
-    });
-
-  } catch (err) {
-    console.error('❌ Fehler bei /approve-payment:', err);
-    res.status(500).json({ error: 'Serverfehler' });
+    res.json({ status: 'completed', data: response.data });
+  } catch (error) {
+    console.error("Fehler beim Abschließen der Zahlung:", error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
   }
 });
 
-/**
- * 3. Payment abgeschlossen (Webhook)
- */
-app.post('/complete-payment', (req, res) => {
-  const signature = req.headers['x-pi-signature'];
-
-  if (!validateSignature(req.rawBody, signature, APP_SECRET_KEY)) {
-    return res.status(403).json({ error: 'Unauthorized' });
-  }
-
-  const payment = req.body;
-  console.log('✅ Payment completed:', payment);
-
-  res.status(200).json({
-    status: 'completed',
-    payment_id: payment.identifier
-  });
-});
-
-/**
- * Test-Endpunkt für Sandbox-Zahlung mit festen Werten
- */
-/**app.post('/test-payment', async (req, res) => {
-  try {
-    const response = await axios.post('https://sandbox.minepi.com/v2/payments', {
-      amount: '1',
-      memo: 'Test',
-      to_username: 'v1etx'
-    }, {
-      headers: {
-        Authorization: `Key ${PI_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    res.status(200).json({
-      success: true,
-      response: response.data
-    });
-  } catch (err) {
-    const error = err.response?.data || err.message;
-    console.error('❌ Fehler bei /test-payment:', error);
-    res.status(500).json({
-      error: 'Zahlung fehlgeschlagen',
-      details: error
-    });
-  }
-});
-*/
-
-/**
- * Status-Check
- */
-app.get('/', (req, res) => {
-  res.json({
-    status: 'running',
-    version: '1.0.0',
-    endpoints: ['/create-payment', '/approve-payment', '/complete-payment', '/test-payment']
-  });
-});
-
-app.listen(port, () => {
-  console.log(`🚀 Server läuft auf http://localhost:${port}`);
-  console.log('PI_API_KEY vorhanden:', !!PI_API_KEY);
-  console.log('APP_SECRET_KEY vorhanden:', !!APP_SECRET_KEY);
+app.listen(PORT, () => {
+  console.log(`🚀 Backend läuft auf Port ${PORT}`);
+  console.log(`🔐 PI_API_KEY: ${process.env.PI_API_KEY ? "✅ vorhanden" : "❌ fehlt"}`);
 });
