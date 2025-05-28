@@ -26,6 +26,13 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
+// Pi-API-Umgebung dynamisch setzen
+const PI_API_BASE = process.env.PI_NETWORK === 'mainnet'
+  ? 'https://api.minepi.com'
+  : 'https://sandbox.minepi.com';
+
+console.log(`🌐 Pi API Umgebung: ${PI_API_BASE}`);
+
 // Middleware zur API-Key Prüfung
 const validateApiKey = (req, res, next) => {
   if (!process.env.PI_API_KEY_TESTNET) {
@@ -34,7 +41,7 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
-// 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
+// 🧾 App-to-User Zahlung erstellen
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
     const { to, amount, memo, metadata } = req.body;
@@ -88,7 +95,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     if (!paymentId) throw new Error("paymentId fehlt");
 
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+      `${PI_API_BASE}/v2/payments/${paymentId}/approve`,
       {},
       {
         headers: {
@@ -112,7 +119,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     if (!paymentId || !txid) throw new Error("paymentId/txid fehlt");
 
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      `${PI_API_BASE}/v2/payments/${paymentId}/complete`,
       { txid },
       {
         headers: {
@@ -136,7 +143,7 @@ app.post('/cancel-payment', validateApiKey, async (req, res) => {
     if (!paymentId) throw new Error("paymentId fehlt");
 
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/cancel`,
+      `${PI_API_BASE}/v2/payments/${paymentId}/cancel`,
       {},
       {
         headers: {
@@ -160,7 +167,7 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
     if (!paymentId) throw new Error("paymentId fehlt");
 
     const statusCheck = await axios.get(
-      `https://api.minepi.com/v2/payments/${paymentId}`,
+      `${PI_API_BASE}/v2/payments/${paymentId}`,
       {
         headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }
       }
@@ -171,7 +178,7 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
 
     if (paymentStatus.developer_approved === false) {
       await axios.post(
-        `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+        `${PI_API_BASE}/v2/payments/${paymentId}/approve`,
         {},
         { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` } }
       );
@@ -180,7 +187,7 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
 
     if (paymentStatus.transaction_verified === true && paymentStatus.developer_completed === false) {
       await axios.post(
-        `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+        `${PI_API_BASE}/v2/payments/${paymentId}/complete`,
         { txid: "MANUAL_OVERRIDE" },
         { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` } }
       );
@@ -201,7 +208,7 @@ app.post('/refund-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId, amount } = req.body;
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/refund`,
+      `${PI_API_BASE}/v2/payments/${paymentId}/refund`,
       { amount },
       { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }}
     );
@@ -218,7 +225,7 @@ app.post('/bulk-cancel', validateApiKey, async (req, res) => {
     const { paymentIds } = req.body;
     const results = await Promise.all(
       paymentIds.map(id =>
-        axios.post(`https://api.minepi.com/v2/payments/${id}/cancel`, {}, {
+        axios.post(`${PI_API_BASE}/v2/payments/${id}/cancel`, {}, {
           headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }
         })
       )
