@@ -34,26 +34,6 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
-app.get('/test-user/:username', validateApiKey, async (req, res) => {
-  const username = req.params.username;
-
-  try {
-    const response = await axios.get(
-      `https://api.minepi.com/v2/users/${username}`,
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`
-        }
-      }
-    );
-
-    res.json({ found: true, data: response.data });
-
-  } catch (error) {
-    res.status(404).json({ found: false, error: error.response?.data || error.message });
-  }
-});
-
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
@@ -247,6 +227,26 @@ app.post('/bulk-cancel', validateApiKey, async (req, res) => {
     res.json({ cancelled: results.length });
   } catch (error) {
     res.status(500).json({ error: "Fehler beim Massenabbruch" });
+  }
+});
+
+app.get('/test-user/:username', validateApiKey, async (req, res) => {
+  const username = req.params.username;
+
+  try {
+    const response = await axios.get(
+      `https://api.minepi.com/v2/users/${username}`,
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`
+        }
+      }
+    );
+
+    res.json({ found: true, data: response.data });
+
+  } catch (error) {
+    res.status(404).json({ found: false, error: error.response?.data || error.message });
   }
 });
 
