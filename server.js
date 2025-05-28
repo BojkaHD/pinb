@@ -5,7 +5,6 @@ import bodyParser from 'body-parser';
 import axios from 'axios';
 
 dotenv.config();
-const PI_API_BASE = 'https://sandbox.minepi.com'; // ⬅ Immer Testnetz!
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,7 +46,8 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
 
     console.log(`[INFO] Starte App-to-User Zahlung ➜ to: ${to}, amount: ${amount}, memo: ${memo || "Standard"}, metadata: ${JSON.stringify(metadata)}`);
 
-    const response = await axios.post(`${PI_API_BASE}/v2/payments`,
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments`,
       {
         amount,
         memo: memo || "App-to-User Auszahlung",
