@@ -73,7 +73,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
 
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
-      'https://api.testnet.minepi.com',
+      'https://sandbox.minepi.com',
       {
         amount,
         memo: memo || "App-to-User Auszahlung",
