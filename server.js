@@ -62,7 +62,6 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     console.log("User:" + JSON.stringify(user));
 
     if (error || !user) {
-      console.log("gugus gsi gelbieben");
       console.log(error);
       return res.status(404).json({ error: 'Benutzer "${to}" nicht gefunden.' });
     }
@@ -73,7 +72,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
 
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
-      'https://api.minepi.com/payments',
+      'https://api.minepi.com/v2/payments',
       {
         amount,
         memo: memo || "App-to-User Auszahlung",
@@ -82,7 +81,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
           pi_username: user.pi_username,
         ...(metadata || {})
         },
-        uid: user.pi_user_id  // ✅ UID statt username
+        userId: user.pi_user_id  // ✅ UID statt username
       },
       {
         headers: {
