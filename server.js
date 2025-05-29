@@ -127,11 +127,15 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 });
 
 app.post('/complete-payment', validateApiKey, async (req, res) => {
-  try {
-    const { paymentId, txid } = req.body;
-    if (!paymentId || !txid) throw new Error("paymentId/txid fehlt");
+  const { paymentId, txid } = req.body;
 
-    const response = await axios.post(
+  if (!paymentId || !txid) {
+    return res.status(400).json({ error: 'paymentId und txid erforderlich' });
+  }
+
+  try {
+    // 1. Zahlung bei Pi bestätigen
+    const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
       {
@@ -142,11 +146,28 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       }
     );
 
-    res.json({ status: 'completed', piData: response.data });
+    const payment = piResponse.data;
+
+    // 2. Transaktion in Supabase einfügen
+    const { error: insertError } = await supabase
+      .from('transactions')
+      .insert({
+        pi_payment_id: paymentId,
+        wallet_address: payment.to_address,
+        user_id: null, // optional: aus Supabase holen per pi_username
+        amount: payment.amount?.toString() || '1',
+        memo: payment.memo || 'donation',
+        status: 'completed'
+      });
+
+    if (insertError) throw insertError;
+
+    console.log("✅ Spende gespeichert für paymentId:", paymentId);
+    res.json({ status: 'completed' });
+
   } catch (error) {
-    const piError = error.response?.data || error.message;
-    console.error("COMPLETE ERROR:", piError);
-    res.status(error.response?.status || 500).json({ error: piError });
+    console.error("❌ Fehler bei /complete-payment:", error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
   }
 });
 
