@@ -17,7 +17,8 @@ const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
   'https://pinb.app',
-  'https://sandbox.minepi.com'
+  'https://sandbox.minepi.com',
+  'https://api.minepi.com/v2/payments'
 ];
 
 app.use(cors({
@@ -73,7 +74,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
 
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
-      'https://sandbox.minepi.com',
+      'https://api.minepi.com/v2/payments',
       {
         amount,
         memo: memo || "App-to-User Auszahlung",
