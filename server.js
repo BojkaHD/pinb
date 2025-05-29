@@ -163,7 +163,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       .insert({
         pi_payment_id: paymentId,
         pi_username: username,
-        wallet_address: result.user.wallet?.address || null,
+        wallet_address: payment.to_address || null,
         amount: payment.amount?.toString() || '1',
         memo: payment.memo || 'donation',
         status: 'completed'
@@ -179,6 +179,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
