@@ -69,6 +69,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     if (!user.pi_user_id) {
       return res.status(400).json({ error: 'Benutzer hat keine gespeicherte pi_user_id.' });
     }
+    console.log("User der uebergeben wird:" + user.pi_user_id);
 
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
@@ -81,7 +82,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
           pi_username: user.pi_username,
         ...(metadata || {})
         },
-        user: user.pi_user_id  // ✅ UID statt username
+        to: user.pi_user_id
       },
       {
         headers: {
