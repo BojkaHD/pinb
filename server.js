@@ -44,7 +44,10 @@ const validateApiKey = (req, res, next) => {
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
     const { to, amount, memo, metadata } = req.body;
-
+    console.log(to);
+    console.log(amount);
+    console.log(memo);
+    console.log(metadata);
     // 🛑 Eingaben prüfen
     if (!to || !amount) {
       return res.status(400).json({ error: '"to" (Pi-Username) und "amount" sind erforderlich.' });
