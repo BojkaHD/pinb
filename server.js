@@ -147,10 +147,10 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = piResponse.data;
-    const username = payment?.metadata?.username;
+    const username = payment?.metadata?.pi_username;
 
     if (!username) {
-      return res.status(400).json({ error: 'Fehlender Username in metadata' });
+      return res.status(400).json({ error: 'Fehlender pi_username in metadata' });
     }
 
     // 2. Transaktion speichern
@@ -175,8 +175,6 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
-
-
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
