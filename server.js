@@ -61,6 +61,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
       .single();
 
     if (error || !user) {
+      console.log("gugus");
       console.log(error);
       return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
