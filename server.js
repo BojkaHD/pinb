@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
   'https://pinb.app',
-  'https://api.minepi.com'
+  'https://sandbox.minepi.com'
 ];
 
 app.use(cors({
@@ -73,7 +73,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
 
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
-      'https://api.minepi.com',
+      'https://api.minepi.com/v2/payments',
       {
         amount,
         memo: memo || "App-to-User Auszahlung",
@@ -82,7 +82,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
           pi_username: user.pi_username,
         ...(metadata || {})
         },
-        to: user.pi_user_id  // ✅ UID statt username
+        uid: user.pi_user_id  // ✅ UID statt username
       },
       {
         headers: {
