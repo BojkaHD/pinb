@@ -62,7 +62,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
       .single();
     console.log("234 gugus gsi gelbieben");
     console.log("error:" + error);
-    console.log("error:" + user);
+    console.log("error:" + JSON.stringify(user));
 
     if (error || !user) {
       console.log("gugus gsi gelbieben");
