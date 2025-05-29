@@ -89,12 +89,29 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     const payment = response.data;
     console.log(`✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.pi_username}`);
 
-    return res.status(200).json({
-      success: true,
-      payment_id: payment.identifier,
-      payment
-    });
+// In DB speichern
+const { error: insertError } = await supabase
+  .from('payments')
+  .insert([{
+    sender: metadata?.from || "unknown",
+    recipient_username: user.pi_username,
+    amount,
+    payment_id: payment.identifier,
+    status: payment.status || 'created',
+    metadata
+  }]);
 
+if (insertError) {
+  console.error('⚠️ Zahlung wurde durchgeführt, aber konnte nicht gespeichert werden:', insertError.message);
+}
+
+return res.status(200).json({
+  success: true,
+  payment_id: payment.identifier,
+  payment
+});
+
+  
   } catch (error) {
     const err = error.response?.data || error.message;
     const code = error.response?.status || 500;
