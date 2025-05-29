@@ -67,7 +67,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     if (error || !user) {
       console.log("gugus gsi gelbieben");
       console.log(error);
-      return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
+      return res.status(404).json({ error: 'Benutzer "${to}" nicht gefunden.' });
     }
 
     if (!user.pi_user_id) {
@@ -83,20 +83,20 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
         metadata: {
           purpose: 'app_to_user',
           pi_username: user.pi_username,
-          ...(metadata || {})
+        ...(metadata || {})
         },
         to: user.pi_user_id  // ✅ UID statt username
       },
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: 'Key ${process.env.PI_API_KEY_TESTNET}',
           'Content-Type': 'application/json'
         }
       }
     );
 
     const payment = response.data;
-    console.log(`✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.pi_username}`);
+    console.log('✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.pi_username}');
 
 // In DB speichern
 const { error: insertError } = await supabase
@@ -125,7 +125,7 @@ return res.status(200).json({
     const err = error.response?.data || error.message;
     const code = error.response?.status || 500;
 
-    console.error(`❌ Fehler bei /create-payment:`, err);
+    console.error('❌ Fehler bei /create-payment:', err);
     return res.status(code).json({ error: err });
   }
 });
