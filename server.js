@@ -50,6 +50,21 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
       return res.status(400).json({ error: 'Felder "to" und "amount" sind erforderlich' });
     }
 
+    // 🔍 Schritt 1: Nutzer aus Supabase prüfen
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('pi_username', to)
+      .single();
+
+    if (error || !user) {
+      console.warn(`[WARN] Empfänger nicht gefunden in Supabase ➜ pi_username: ${to}`);
+      return res.status(404).json({ error: 'Empfänger nicht gefunden oder nicht autorisiert' });
+    }
+
+    console.log(`[INFO] Empfänger validiert in Supabase: ${to}`);
+
+    // ✅ Schritt 2: Zahlung via Pi-API auslösen
     console.log(`[INFO] Starte App-to-User Zahlung ➜ to: ${to}, amount: ${amount}, memo: ${memo || "Standard"}, metadata: ${JSON.stringify(metadata)}`);
 
     const response = await axios.post(
@@ -87,6 +102,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     res.status(statusCode).json({ error: errData });
   }
 });
+
 
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
