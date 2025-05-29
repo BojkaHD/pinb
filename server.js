@@ -149,16 +149,23 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     const payment = piResponse.data;
 
     // 2. Transaktion in Supabase einfügen
-    const { error: insertError } = await supabase
-      .from('transactions')
-      .insert({
-        pi_payment_id: paymentId,
-        wallet_address: payment.to_address,
-        user_id: null, // optional: aus Supabase holen per pi_username
-        amount: payment.amount?.toString() || '1',
-        memo: payment.memo || 'donation',
-        status: 'completed'
-      });
+    const payload = {
+  pi_payment_id: paymentId,
+  wallet_address: payment.to_address,
+  user_id: null,
+  amount: payment.amount?.toString() || '1',
+  memo: payment.memo || 'donation',
+  status: 'completed'
+};
+
+console.log("🟨 Insert Payload:", payload);
+
+// 2. Transaktion in Supabase einfügen
+const { error: insertError } = await supabase
+  .from('transactions')
+  .insert(payload);
+
+
 
     if (insertError) throw insertError;
 
