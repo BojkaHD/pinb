@@ -89,7 +89,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
       },
       {
         headers: {
-          Authorization: 'Key ${process.env.PI_API_KEY_TESTNET}',
+          Authorization: 'Key '+process.env.PI_API_KEY_TESTNET,
           'Content-Type': 'application/json'
         }
       }
