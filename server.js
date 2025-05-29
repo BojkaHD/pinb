@@ -17,7 +17,6 @@ const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
   'https://pinb.app',
-  'https://sandbox.minepi.com',
   'https://api.minepi.com/v2/payments'
 ];
 
