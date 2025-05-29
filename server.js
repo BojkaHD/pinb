@@ -54,14 +54,16 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     }
 
     // 🔍 Nutzer mit Pi-Username aus Supabase laden
+    console.log("123 gugus gsi gelbieben");
     const { data: user, error } = await supabase
       .from('users')
       .select('pi_user_id, pi_username')
       .eq('pi_username', to)
       .single();
+    console.log("234 gugus gsi gelbieben");
 
     if (error || !user) {
-      console.log("gugus");
+      console.log("gugus gsi gelbieben");
       console.log(error);
       return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
