@@ -134,7 +134,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   }
 
   try {
-    // ✅ 1. Pi Zahlung abschließen
+    // 1. Zahlung bei Pi bestätigen
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
@@ -147,44 +147,31 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = piResponse.data;
-    const wallet = payment.to_address;
 
-    // ✅ 2. User anhand wallet_address in Supabase finden
-    const { data: userRecord, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('wallet_address', wallet)
+    // 2. User anhand der Wallet-Adresse aus Supabase holen
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("pi_username")
+      .eq("wallet_address", payment.to_address)
       .single();
 
-    if (userError || !userRecord) {
-      console.warn("⚠️ Kein User für Wallet gefunden – wird als anonyme Spende gespeichert.");
-    }
+    const username = user?.pi_username || null;
 
-    // ✅ 3. Eintrag in transactions
-    const payload = {
-      pi_payment_id: paymentId,
-      wallet_address: wallet,
-      user_id: userRecord?.id || null, // falls kein user gefunden
-      amount: payment.amount?.toString() || '1',
-      memo: payment.memo || 'donation',
-      status: 'completed'
-    };
-
-    console.log("🟨 Insert Payload:", payload);
-
-    if (!payload.user_id) {
-      return res.status(400).json({ error: "user_id konnte nicht zugeordnet werden – wallet nicht registriert" });
-    }
-
+    // 3. Transaktion speichern
     const { error: insertError } = await supabase
       .from('transactions')
-      .insert(payload);
+      .insert({
+        pi_payment_id: paymentId,
+        wallet_address: payment.to_address,
+        pi_username: username,
+        amount: payment.amount?.toString() || '1',
+        memo: payment.memo || 'donation',
+        status: 'completed'
+      });
 
-    if (insertError) {
-      throw insertError;
-    }
+    if (insertError) throw insertError;
 
-    console.log("✅ Spende gespeichert in Supabase");
+    console.log("✅ Spende gespeichert:", paymentId);
     res.json({ status: 'completed' });
 
   } catch (error) {
@@ -192,6 +179,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
