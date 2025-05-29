@@ -163,7 +163,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       .insert({
         pi_payment_id: paymentId,
         pi_username: username,
-        wallet_address: payment.to_address || null,
+        wallet_address: result.user.wallet?.address || null,
         amount: payment.amount?.toString() || '1',
         memo: payment.memo || 'donation',
         status: 'completed'
