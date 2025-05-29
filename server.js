@@ -147,23 +147,19 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = piResponse.data;
+    const username = payment?.metadata?.username;
 
-    // 2. User anhand der Wallet-Adresse aus Supabase holen
-    const { data: user, error: userError } = await supabase
-      .from("users")
-      .select("pi_username")
-      .eq("wallet_address", payment.to_address)
-      .single();
+    if (!username) {
+      return res.status(400).json({ error: 'Fehlender Username in metadata' });
+    }
 
-    const username = user?.pi_username || null;
-
-    // 3. Transaktion speichern
+    // 2. Transaktion speichern
     const { error: insertError } = await supabase
       .from('transactions')
       .insert({
         pi_payment_id: paymentId,
-        wallet_address: payment.to_address,
         pi_username: username,
+        wallet_address: payment.to_address || null,
         amount: payment.amount?.toString() || '1',
         memo: payment.memo || 'donation',
         status: 'completed'
@@ -179,6 +175,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 
