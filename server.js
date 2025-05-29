@@ -153,9 +153,12 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     const payment = piResponse.data;
 
 const username = payment?.metadata?.pi_username;
-const userId = payment?.to || null; // Das ist die pi_user_id bei App-to-User
+const userId = payment?.metadata?.pi_user_id;
 
-// 2. Transaktion speichern
+if (!username || !userId) {
+  return res.status(400).json({ error: 'pi_username oder pi_user_id fehlt in metadata' });
+}
+
 const { error: insertError } = await supabase
   .from('transactions')
   .insert({
@@ -168,10 +171,11 @@ const { error: insertError } = await supabase
     status: 'completed'
   });
 
-    if (insertError) throw insertError;
+if (insertError) throw insertError;
 
-    console.log("✅ Spende gespeichert:", paymentId);
-    res.json({ status: 'completed' });
+console.log("✅ Spende gespeichert:", paymentId);
+res.json({ status: 'completed' });
+
 
   } catch (error) {
     console.error("❌ Fehler bei /complete-payment:", error.response?.data || error.message);
