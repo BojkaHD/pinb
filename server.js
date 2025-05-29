@@ -52,37 +52,35 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
 
     // 🔍 Schritt 1: Nutzer aus Supabase prüfen
     const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('pi_username', to)
-      .single();
+  .from('users')
+  .select('pi_user_id, pi_username, wallet_address')
+  .eq('pi_username', to)  // <-- du suchst nach dem eingegebenen Username
+  .single();
 
-    if (error || !user) {
-      console.warn(`[WARN] Empfänger nicht gefunden in Supabase ➜ pi_username: ${to}`);
-      return res.status(404).json({ error: 'Empfänger nicht gefunden oder nicht autorisiert' });
+if (!user || error) {
+  return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+}
+
+if (!user.pi_user_id) {
+  return res.status(400).json({ error: 'Keine Pi UID vorhanden (pi_user_id)' });
+}
+
+// 🔁 NEU: Zahlung mit UID senden (nicht Username!)
+const response = await axios.post(
+  `https://api.minepi.com/v2/payments`,
+  {
+    amount,
+    memo: memo || "App-to-User Auszahlung",
+    metadata: metadata || {},
+    to: user.pi_user_id  // ✅ WICHTIG: UID verwenden
+  },
+  {
+    headers: {
+      Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+      'Content-Type': 'application/json'
     }
-
-    console.log(`[INFO] Empfänger validiert in Supabase: ${to}`);
-
-    // ✅ Schritt 2: Zahlung via Pi-API auslösen
-    console.log(`[INFO] Starte App-to-User Zahlung ➜ to: ${to}, amount: ${amount}, memo: ${memo || "Standard"}, metadata: ${JSON.stringify(metadata)}`);
-
-    const response = await axios.post(
-      `https://api.minepi.com/v2/payments`,
-      {
-        amount,
-        memo: memo || "App-to-User Auszahlung",
-        metadata: metadata || {},
-        to
-      },
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
+  }
+);
     const payment = response.data;
 
     console.log(`[SUCCESS] Zahlung erstellt – Payment ID: ${payment.identifier}, Empfänger: ${to}, Betrag: ${amount} Pi`);
