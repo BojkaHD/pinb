@@ -81,7 +81,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
           pi_username: user.pi_username,
         ...(metadata || {})
         },
-        userId: user.pi_user_id  // ✅ UID statt username
+        user: user.pi_user_id  // ✅ UID statt username
       },
       {
         headers: {
