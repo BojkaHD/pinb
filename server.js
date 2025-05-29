@@ -54,15 +54,12 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     }
 
     // 🔍 Nutzer mit Pi-Username aus Supabase laden
-    console.log("123 gugus gsi gelbieben");
     const { data: user, error } = await supabase
       .from('users')
       .select('pi_user_id, pi_username')
       .eq('pi_username', to)
       .single();
-    console.log("234 gugus gsi gelbieben");
-    console.log("error:" + error);
-    console.log("error:" + JSON.stringify(user));
+    console.log("User:" + JSON.stringify(user));
 
     if (error || !user) {
       console.log("gugus gsi gelbieben");
@@ -76,7 +73,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
 
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
-      'https://api.minepi.com/v2/payments',
+      'https://api.minepi.com/testnet/v2/payments',
       {
         amount,
         memo: memo || "App-to-User Auszahlung",
