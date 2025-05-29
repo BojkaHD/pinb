@@ -151,23 +151,22 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = piResponse.data;
-    const username = payment?.metadata?.pi_username;
 
-    if (!username) {
-      return res.status(400).json({ error: 'Fehlender pi_username in metadata' });
-    }
+const username = payment?.metadata?.pi_username;
+const userId = payment?.to || null; // Das ist die pi_user_id bei App-to-User
 
-    // 2. Transaktion speichern
-    const { error: insertError } = await supabase
-      .from('transactions')
-      .insert({
-        pi_payment_id: paymentId,
-        pi_username: username,
-        wallet_address: payment.to_address || null,
-        amount: payment.amount?.toString() || '1',
-        memo: payment.memo || 'donation',
-        status: 'completed'
-      });
+// 2. Transaktion speichern
+const { error: insertError } = await supabase
+  .from('transactions')
+  .insert({
+    pi_payment_id: paymentId,
+    pi_username: username,
+    pi_user_id: userId,
+    wallet_address: payment.to_address || null,
+    amount: payment.amount?.toString() || '1',
+    memo: payment.memo || 'donation',
+    status: 'completed'
+  });
 
     if (insertError) throw insertError;
 
@@ -292,7 +291,7 @@ app.get('/test-user/:username', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      .select('pi_user_id')
       .eq('pi_username', username)
       .single(); // Nur ein Eintrag erwartet
 
