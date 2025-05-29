@@ -151,27 +151,27 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = piResponse.data;
+    const username = payment?.metadata?.pi_username;
+    const uid = payment?.metadata?.pi_user_id || null;
 
-const username = payment?.metadata?.pi_username;
-const userId = payment?.metadata?.pi_user_id;
+    if (!username) {
+      return res.status(400).json({ error: 'Fehlender Username in metadata' });
+    }
 
-if (!username || !userId) {
-  return res.status(400).json({ error: 'pi_username oder pi_user_id fehlt in metadata' });
-}
+    const { error: insertError } = await supabase
+      .from('transactions')
+      .insert({
+        pi_payment_id: paymentId,
+        pi_username: username,
+        pi_user_id: uid, // kann null sein
+        wallet_address: payment.to_address || null,
+        amount: payment.amount?.toString() || '1',
+        memo: payment.memo || 'donation',
+        status: 'completed'
+      });
 
-const { error: insertError } = await supabase
-  .from('transactions')
-  .insert({
-    pi_payment_id: paymentId,
-    pi_username: username,
-    pi_user_id: userId,
-    wallet_address: payment.to_address || null,
-    amount: payment.amount?.toString() || '1',
-    memo: payment.memo || 'donation',
-    status: 'completed'
-  });
+    if (insertError) throw insertError;
 
-if (insertError) throw insertError;
 
 console.log("✅ Spende gespeichert:", paymentId);
 res.json({ status: 'completed' });
