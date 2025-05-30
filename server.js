@@ -69,7 +69,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${user.pi_user_id}/create`,
       {
-        to: user.uid,
+        to: user.pi_user_id,
         amount,
         memo: memo || "App-to-User Auszahlung",
         metadata: {
