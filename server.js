@@ -39,8 +39,7 @@ const validateApiKey = (req, res, next) => {
   }
   next();
 };
-console.log("🔎 Empfänger-UID (to):", user.pi_user_id);
-console.log("✅ Pi UID an Pi API senden:", user.pi_user_id);
+
 // App-to-User Zahlung erstellen
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
@@ -52,20 +51,23 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     }
 
     // 🔍 Nutzer anhand Pi-Username aus Supabase holen
-    const { data: user, error } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('pi_user_id, pi_username')
       .eq('pi_username', to)
       .single();
 
-    if (error || !user) {
-      console.log(error);
+    if (userError || !user) {
+      console.error('Benutzerabfragefehler:', userError?.message || 'Benutzer nicht gefunden');
       return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
 
     if (!user.pi_user_id) {
       return res.status(400).json({ error: 'Benutzer hat keine gespeicherte pi_user_id.' });
     }
+
+    console.log("🔎 Empfänger-UID (to):", user.pi_user_id);
+    console.log("✅ Pi UID an Pi API senden:", user.pi_user_id);
 
     // 📤 Zahlung via Pi API initiieren
     const response = await axios.post(
@@ -100,7 +102,10 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
         amount,
         payment_id: payment.identifier,
         status: payment.status || 'created',
-        metadata
+        metadata: {
+          ...metadata,
+          pi_user_id: user.pi_user_id
+        }
       }]);
 
     if (insertError) {
