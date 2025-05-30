@@ -73,7 +73,8 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
         amount,
         memo: memo || "App-to-User Auszahlung",
         metadata: {
-          purpose: 'app_to_user'
+          purpose: 'app_to_user',
+          ...(metadata || {})
         }, 
       },
       {
