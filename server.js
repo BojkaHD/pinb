@@ -197,6 +197,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       process.env.APP_SECRET_KEY_TESTNET,
       { algorithm: 'HS256' }
     );
+    console.log("🧾 Generierte txid:", txid);
 
     // ⛓️ Zahlung bei Pi abschließen
     const piResponse = await axios.post(
@@ -212,7 +213,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
 
     const payment = piResponse.data;
 
-    // 📦 Daten auslesen
+    // 📦 Relevante Daten extrahieren
     const uid = payment?.user_uid || null;
     const username = payment?.metadata?.username || null;
     const senderWallet = payment?.from_address || null;
@@ -227,23 +228,52 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       return res.status(400).json({ error: 'UID fehlt' });
     }
 
-    // 🧾 Zahlung als abgeschlossen speichern
-    const { error: updateError } = await supabase
+    // 🔎 Prüfen, ob Zahlung bereits existiert
+    const existing = await supabase
       .from('payments')
-      .update({
-        status: 'completed',
-        txid,
-        sender: senderWallet,
-        amount,
-        memo,
-        uid,
-        username,
-        metadata: payment.metadata || null,
-        developer_approved: developerApproved,
-        transaction_verified: transactionVerified,
-        developer_completed: developerCompleted
-      })
-      .eq('payment_id', paymentId);
+      .select('payment_id')
+      .eq('payment_id', paymentId)
+      .maybeSingle();
+
+    if (existing.error) {
+      console.error("❌ Fehler beim Lesen von Supabase:", existing.error);
+      return res.status(500).json({ error: 'Fehler beim Lesen der Datenbank' });
+    }
+
+    // 🔄 Datenobjekt für Update/Insert
+    const updateData = {
+      payment_id: paymentId,
+      status: 'completed',
+      txid,
+      sender: senderWallet,
+      amount,
+      memo,
+      uid,
+      username,
+      metadata: payment.metadata || null,
+      developer_approved: developerApproved,
+      transaction_verified: transactionVerified,
+      developer_completed: developerCompleted
+    };
+
+    let updateError;
+
+    if (existing.data) {
+      // ✅ Update, wenn vorhanden
+      const { error } = await supabase
+        .from('payments')
+        .update(updateData)
+        .eq('payment_id', paymentId);
+
+      updateError = error;
+    } else {
+      // ➕ Insert, wenn nicht vorhanden
+      const { error } = await supabase
+        .from('payments')
+        .insert([updateData]);
+
+      updateError = error;
+    }
 
     if (updateError) {
       console.error("❌ Supabase Fehler:", updateError);
@@ -258,9 +288,6 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
-
-
-
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
