@@ -70,7 +70,7 @@ app.post('/create-payment', async (req, res) => {
       to_address: user.wallet_address,
     };
 
-    const piResponse = await axios.post('https://api.testnet.minepi.com/v2/payments', paymentData, {
+    const piResponse = await axios.post('https://api.minepi.com/', paymentData, {
       headers: {
         Authorization: `Key ${PI_API_KEY_TESTNET}`,
         'Content-Type': 'application/json',
