@@ -54,7 +54,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     const { data: user, error } = await supabase
       .from('users')
       .select('pi_user_id, pi_username')
-      .eq('pi_user_id', to)
+      .eq('pi_username', to)
       .single();
 
     if (error || !user) {
