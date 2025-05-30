@@ -50,7 +50,7 @@ const validateApiKey = (req, res, next) => {
 app.post('/createPayment', async (req, res) => {
   const { uid, amount, memo } = req.body;
 
-  // Benutzer validieren
+  // Benutzer aus Supabase "users" lesen
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('uid')
@@ -120,11 +120,16 @@ app.post('/createPayment', async (req, res) => {
   }
 });
 
+// approve-payment Route
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
-    const { paymentId } = req.body;
-    if (!paymentId) throw new Error("paymentId fehlt");
+    const { paymentId, uid, username, wallet_address } = req.body;
 
+    if (!paymentId || !uid || !username || !wallet_address) {
+      throw new Error("Erforderliche Daten fehlen");
+    }
+
+    // Zahlung bei Pi genehmigen
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
@@ -136,6 +141,22 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       }
     );
 
+    // Transaktion als 'approved' speichern (nur status und wallet)
+    const { error } = await supabase.from('transactions').upsert({
+      pi_payment_id: paymentId,
+      uid,
+      username,
+      wallet_address, // Spender-Wallet
+      status: 'approved'
+    }, {
+      onConflict: ['pi_payment_id']
+    });
+
+    if (error) {
+      console.error("❌ Supabase Fehler:", error);
+      return res.status(500).json({ error: "Speichern in Supabase fehlgeschlagen" });
+    }
+
     res.json({ status: 'approved', piData: response.data });
   } catch (error) {
     const piError = error.response?.data || error.message;
@@ -144,6 +165,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
+// complete-payment Route
 app.post('/complete-payment', validateApiKey, async (req, res) => {
   const { paymentId, txid } = req.body;
 
@@ -152,7 +174,6 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   }
 
   try {
-    // 1. Zahlung bei Pi bestätigen
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
@@ -167,35 +188,35 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     const payment = piResponse.data;
     const username = payment?.metadata?.username;
     const uid = payment?.metadata?.uid || null;
+    const senderWallet = payment?.from_address || null;
 
     if (!username) {
       return res.status(400).json({ error: 'Fehlender Username in metadata' });
     }
 
-    const { error: insertError } = await supabase
+    // Transaktion abschließend aktualisieren
+    const { error: updateError } = await supabase
       .from('transactions')
-      .insert({
-        pi_payment_id: paymentId,
-        username: username,
-        uid: uid, // kann null sein
-        wallet_address: payment.to_address || null,
+      .update({
+        txid: txid,
+        status: 'completed',
+        wallet_address: senderWallet,
         amount: payment.amount?.toString() || '1',
-        memo: payment.memo || 'donation',
-        status: 'completed'
-      });
+        memo: payment.memo || 'donation'
+      })
+      .eq('pi_payment_id', paymentId);
 
-    if (insertError) throw insertError;
+    if (updateError) throw updateError;
 
-
-console.log("✅ Spende gespeichert:", paymentId);
-res.json({ status: 'completed' });
-
+    console.log("✅ Spende gespeichert:", paymentId);
+    res.json({ status: 'completed' });
 
   } catch (error) {
     console.error("❌ Fehler bei /complete-payment:", error.response?.data || error.message);
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 
