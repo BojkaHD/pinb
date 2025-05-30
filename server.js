@@ -7,7 +7,7 @@ import axios from 'axios';
 
 import { createClient } from '@supabase/supabase-js';
 
-const VITE_VITE_PI_API_KEY_TESTNET = process.env.VITE_VITE_PI_API_KEY_TESTNET;
+const PI_API_KEY_TESTNET = process.env.PI_API_KEY_TESTNET;
 
 
 const supabase = createClient(
@@ -40,8 +40,8 @@ app.use(bodyParser.json());
 
 // Middleware zur API-Key Prüfung
 const validateApiKey = (req, res, next) => {
-  if (!process.env.VITE_VITE_PI_API_KEY_TESTNET) {
-    return res.status(500).json({ error: "VITE_VITE_PI_API_KEY_TESTNET nicht konfiguriert" });
+  if (!process.env.PI_API_KEY_TESTNET) {
+    return res.status(500).json({ error: "PI_API_KEY_TESTNET nicht konfiguriert" });
   }
   next();
 };
@@ -79,7 +79,7 @@ app.post('/create-payment', async (req, res) => {
       paymentData,
       {
         headers: {
-          Authorization: `Key ${VITE_VITE_PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
@@ -129,7 +129,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       {},
       {
         headers: {
-          Authorization: `Key ${process.env.VITE_VITE_PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
@@ -157,7 +157,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.VITE_VITE_PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
@@ -208,7 +208,7 @@ app.post('/cancel-payment', validateApiKey, async (req, res) => {
       {},
       {
         headers: {
-          Authorization: `Key ${process.env.VITE_VITE_PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
@@ -230,7 +230,7 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
     const statusCheck = await axios.get(
       `https://api.minepi.com/v2/payments/${paymentId}`,
       {
-        headers: { Authorization: `Key ${process.env.VITE_VITE_PI_API_KEY_TESTNET}` }
+        headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }
       }
     );
 
@@ -241,7 +241,7 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
       await axios.post(
         `https://api.minepi.com/v2/payments/${paymentId}/approve`,
         {},
-        { headers: { Authorization: `Key ${process.env.VITE_VITE_PI_API_KEY_TESTNET}` } }
+        { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` } }
       );
       action = 'approved';
     }
@@ -250,7 +250,7 @@ app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
       await axios.post(
         `https://api.minepi.com/v2/payments/${paymentId}/complete`,
         { txid: "MANUAL_OVERRIDE" },
-        { headers: { Authorization: `Key ${process.env.VITE_VITE_PI_API_KEY_TESTNET}` } }
+        { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` } }
       );
       action = 'completed';
     }
@@ -271,7 +271,7 @@ app.post('/refund-payment', validateApiKey, async (req, res) => {
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/refund`,
       { amount },
-      { headers: { Authorization: `Key ${process.env.VITE_VITE_PI_API_KEY_TESTNET}`,
+      { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
         'Content-Type': 'application/json' }}
     );
     res.json({ refundStatus: 'success', data: response.data });
@@ -288,7 +288,7 @@ app.post('/bulk-cancel', validateApiKey, async (req, res) => {
     const results = await Promise.all(
       paymentIds.map(id =>
         axios.post(`https://api.minepi.com/v2/payments/${id}/cancel`, {}, {
-          headers: { Authorization: `Key ${process.env.VITE_VITE_PI_API_KEY_TESTNET}` }
+          headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }
         })
       )
     );
@@ -327,5 +327,5 @@ app.get('/test-user/:username', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend aktiv auf Port ${PORT}`);
-  console.log(`🔐 API-Key: ${process.env.VITE_VITE_PI_API_KEY_TESTNET ? "✅ Konfiguriert" : "❌ Fehlt!"}`);
+  console.log(`🔐 API-Key: ${process.env.PI_API_KEY_TESTNET ? "✅ Konfiguriert" : "❌ Fehlt!"}`);
 });
