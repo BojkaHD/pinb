@@ -47,20 +47,17 @@ const validateApiKey = (req, res, next) => {
 };
 
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
-
 app.post('/payments', async (req, res) => {
-  const { uid, username, amount, memo } = req.body;
+  const { uid, amount, memo } = req.body;
 
   // Benutzer validieren
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('uid, username')
+    .select('uid')
     .eq('uid', uid)
-    .eq('username', username)
     .single();
 
   console.log("UserID:"+user.uid);
-  console.log("Username:"+user.username);
 
   if (userError || !user) {
     return res.status(400).json({ error: 'User nicht gefunden.' });
@@ -71,10 +68,7 @@ app.post('/payments', async (req, res) => {
       payment: {
         amount,
         memo,
-        metadata: {
-          username: user.username,
-          origin: "a2u"
-        },
+        metadata: {test: "Testpayment-A2U"},
         uid: user.uid
       }
     };
