@@ -240,9 +240,6 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
 });
 
 
-
-
-
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId } = req.body;
