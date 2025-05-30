@@ -42,7 +42,6 @@ const validateApiKey = (req, res, next) => {
 
 // App-to-User Zahlung erstellen
 app.post('/create-payment', validateApiKey, async (req, res) => {
-  let user;
   try {
     const { to, amount, memo, metadata } = req.body;
 
@@ -52,18 +51,16 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     }
 
     // 🔍 Nutzer anhand Pi-Username aus Supabase holen
-    const { data: userData, error: userError } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('pi_user_id, pi_username')
       .eq('pi_username', to)
       .single();
 
-    if (userError || !userData) {
+    if (userError || !user) {
       console.error('Benutzerabfragefehler:', userError?.message || 'Benutzer nicht gefunden');
       return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
-
-    user = userData;
 
     if (!user.pi_user_id) {
       return res.status(400).json({ error: 'Benutzer hat keine gespeicherte pi_user_id.' });
@@ -72,20 +69,25 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     console.log("🔎 Empfänger-UID (to):", user.pi_user_id);
     console.log("✅ Pi UID an Pi API senden:", user.pi_user_id);
 
+    // KORREKTUR: Verwende 'to' statt 'user_uid' und sende als String
+    const paymentData = {
+      amount: Number(amount),
+      memo: memo || "App-to-User Auszahlung",
+      metadata: {
+        purpose: 'app_to_user',
+        pi_username: user.pi_username,
+        pi_user_id: user.pi_user_id,
+        ...(metadata || {})
+      },
+      to: user.pi_user_id.toString() // WICHTIG: Als String senden
+    };
+
+    console.log("📤 Sende an Pi API:", paymentData);
+
     // 📤 Zahlung via Pi API initiieren
     const response = await axios.post(
       'https://api.minepi.com/v2/payments',
-      {
-        amount,
-        memo: memo || "App-to-User Auszahlung",
-        metadata: {
-          purpose: 'app_to_user',
-          pi_username: user.pi_username,  // WICHTIG: Füge pi_username hinzu
-          pi_user_id: user.pi_user_id,
-          ...(metadata || {})
-        },
-        user_uid: user.pi_user_id  // KORREKTUR: Verwende 'user_uid' statt 'to'
-      },
+      paymentData,
       {
         headers: {
           Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
