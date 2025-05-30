@@ -183,6 +183,9 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 
 import jwt from 'jsonwebtoken';
 
+import jwt from 'jsonwebtoken';
+import axios from 'axios';
+
 app.post('/complete-payment', validateApiKey, async (req, res) => {
   const { paymentId } = req.body;
 
@@ -195,7 +198,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     const txid = jwt.sign(
       { payment_id: paymentId },
       process.env.APP_SECRET_KEY_TESTNET,
-      { algorithm: 'HS256', expiresIn: '5m' }  // Gültigkeit begrenzen
+      { algorithm: 'HS256', expiresIn: '5m' }
     );
     console.log("🧾 Generierte txid:", txid);
 
@@ -208,19 +211,20 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
           Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         },
-        timeout: 10000  // Timeout hinzufügen
+        timeout: 10000
       }
     );
 
     const payment = piResponse.data;
     
-    // 3. Kritische Validierung
-    if (!payment.status?.developer_completed) {
-      throw new Error('Pi Server: developer_completed nicht gesetzt');
+    // 3. UID validieren (36 Zeichen UUID)
+    const uid = payment.user_uid;
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uid || !uuidPattern.test(uid)) {
+      throw new Error(`Invalid UID format: ${uid}`);
     }
 
-    // 4. Daten extrahieren mit Fallbacks
-    const uid = payment.user_uid;
+    // 4. Daten extrahieren
     const username = payment.metadata?.username || null;
     const senderWallet = payment.from_address;
     const amount = payment.amount.toString();
@@ -239,15 +243,24 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
         ? 'completed' 
         : 'pending';
 
-    // 6. Datenbankoperation
+    // 6. Existierende Zahlung prüfen
     const { data: existing, error: fetchError } = await supabase
       .from('payments')
-      .select('payment_id, status')
+      .select('payment_id, status, transaction_verified')
       .eq('payment_id', paymentId)
       .maybeSingle();
 
     if (fetchError) throw fetchError;
 
+    // 7. Verhindere Überschreiben verifizierter Transaktionen
+    if (existing?.transaction_verified) {
+      return res.json({ 
+        status: existing.status,
+        message: 'Zahlung bereits verifiziert' 
+      });
+    }
+
+    // 8. Datenobjekt für DB-Operation
     const paymentData = {
       payment_id: paymentId,
       status: paymentStatus,
@@ -264,7 +277,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       last_updated: new Date().toISOString()
     };
 
-    // 7. Update oder Insert
+    // 9. Update oder Insert
     const { error: dbError } = existing 
       ? await supabase.from('payments').update(paymentData).eq('payment_id', paymentId)
       : await supabase.from('payments').insert([paymentData]);
@@ -272,13 +285,15 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     if (dbError) throw dbError;
 
     console.log(`✅ Zahlung [${paymentStatus}] gespeichert:`, paymentId);
-    res.json({ 
-      status: paymentStatus,
-      pi_status: payment.status
-    });
+
+    // 10. Hintergrundprüfung für pending-Status starten
+    if (paymentStatus === 'pending') {
+      schedulePaymentCheck(paymentId);
+    }
+
+    res.json({ status: paymentStatus });
 
   } catch (error) {
-    // 8. Präzise Fehlerbehandlung
     const errorDetails = error.response?.data || error.message;
     const statusCode = error.response?.status || 500;
     
@@ -288,14 +303,72 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       stack: error.stack
     });
 
-    res.status(statusCode > 400 ? statusCode : 500).json({
-      error: 'Zahlungsabschluss fehlgeschlagen',
-      details: errorDetails
+    res.status(statusCode).json({
+      error: errorDetails?.error || errorDetails
     });
   }
 });
 
+// ===== HILFSFUNKTIONEN ===== //
 
+async function schedulePaymentCheck(paymentId) {
+  try {
+    // 5 Versuche alle 30 Sekunden
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 30000));
+      
+      const updated = await checkPaymentStatus(paymentId);
+      if (updated) return;
+    }
+    
+    console.warn(`⚠️ Statusprüfung abgebrochen nach 5 Versuchen: ${paymentId}`);
+    await supabase
+      .from('payments')
+      .update({ status: 'failed' })
+      .eq('payment_id', paymentId);
+      
+  } catch (error) {
+    console.error('❌ Fehler in schedulePaymentCheck:', error);
+  }
+}
+
+async function checkPaymentStatus(paymentId) {
+  try {
+    const piResponse = await axios.get(
+      `https://api.minepi.com/v2/payments/${paymentId}`,
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`
+        },
+        timeout: 5000
+      }
+    );
+    
+    const payment = piResponse.data;
+    const verified = payment.status?.transaction_verified || false;
+    
+    if (verified) {
+      await supabase
+        .from('payments')
+        .update({
+          status: 'verified',
+          transaction_verified: true,
+          last_updated: new Date().toISOString()
+        })
+        .eq('payment_id', paymentId);
+      
+      console.log(`✅ Zahlung verifiziert: ${paymentId}`);
+      return true;
+    }
+    
+    console.log(`⏳ Noch nicht verifiziert (Versuch ${attempt}): ${paymentId}`);
+    return false;
+    
+  } catch (error) {
+    console.error('❌ Fehler in checkPaymentStatus:', error);
+    return false;
+  }
+}
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId } = req.body;
