@@ -48,58 +48,74 @@ const validateApiKey = (req, res, next) => {
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
 
 app.post('/create-payment', async (req, res) => {
-  const { uid, amount, memo } = req.body;
+  const { uid, amount, memo, pi_uid } = req.body; // pi_uid wird jetzt im Request erwartet
 
-  // Get user info
+  // User-Daten abrufen
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('username, wallet_address')
+    .select('username')
     .eq('uid', uid)
     .single();
 
   if (userError || !user) {
-    return res.status(400).json({ error: 'User not found.' });
+    return res.status(400).json({ error: 'User nicht gefunden.' });
   }
 
-  // Step 1: Create payment request via Pi Network
   try {
+    // Zahlung bei Pi Network erstellen
     const paymentData = {
       amount,
       memo,
-      metadata: { uid, username: user.username },
-      to_address: user.wallet_address,
+      metadata: { 
+        uid,
+        username: user.username 
+      },
+      user_uid: pi_uid  // Pi User ID aus dem Request
     };
 
-    const piResponse = await axios.post('https://api.minepi.com/', paymentData, {
-      headers: {
-        Authorization: `Key ${PI_API_KEY_TESTNET}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const piResponse = await axios.post(
+      'https://api.minepi.com/v2/payments',
+      paymentData,
+      {
+        headers: {
+          Authorization: `Key ${PI_API_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
 
     const piPayment = piResponse.data;
 
-    // Step 2: Store transaction in Supabase
+    // Transaktion in Supabase speichern
     const { error: txError } = await supabase.from('transactions').insert([
       {
         pi_payment_id: piPayment.identifier,
-        wallet_address: user.wallet_address,
         amount: amount.toString(),
         memo,
         status: 'pending',
-        username: user.username,
         uid: uid,
-      },
+        user_pi_uid: pi_uid,  // Aus Request speichern
+        username: user.username
+      }
     ]);
 
     if (txError) {
-      return res.status(500).json({ error: 'Failed to log transaction.' });
+      console.error('Supabase Fehler:', txError);
+      return res.status(500).json({ error: 'Transaktionsspeicherung fehlgeschlagen' });
     }
 
-    res.json({ success: true, payment_id: piPayment.identifier });
+    res.json({ 
+      success: true, 
+      payment_id: piPayment.identifier,
+      approval_url: piPayment.payment_url
+    });
+
   } catch (err) {
-    console.error('Payment Error:', err.message);
-    res.status(500).json({ error: 'Failed to initiate payment.' });
+    console.error('Zahlungsfehler:', err.response?.data || err.message);
+    res.status(500).json({ 
+      error: 'Zahlung konnte nicht initiiert werden',
+      details: err.response?.data || err.message
+    });
   }
 });
 
