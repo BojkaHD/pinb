@@ -22,7 +22,8 @@ const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
   'https://pinb.app',
-  'https://sandbox.minepi.com'
+  'https://sandbox.minepi.com',
+  'https://pinb.onrender.com'
 ];
 
 app.use(cors({
