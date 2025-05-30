@@ -69,7 +69,7 @@ app.post('/createPayment', async (req, res) => {
         amount,
         memo,
         metadata: {test: "Testpayment-A2U"},
-        uid: user.uid
+        uid
       }
     };
 
