@@ -39,7 +39,8 @@ const validateApiKey = (req, res, next) => {
   }
   next();
 };
-
+console.log("🔎 Empfänger-UID (to):", user.pi_user_id);
+console.log("✅ Pi UID an Pi API senden:", user.pi_user_id);
 // App-to-User Zahlung erstellen
 app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
