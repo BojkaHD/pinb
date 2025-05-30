@@ -48,7 +48,7 @@ const validateApiKey = (req, res, next) => {
 
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
 
-app.post('/create-payment', async (req, res) => {
+app.post('/createPayment', async (req, res) => {
   const { uid, username, amount, memo } = req.body;
 
   // User-Daten abrufen (uid ist bereits die Pi Network user_uid)
@@ -62,9 +62,9 @@ app.post('/create-payment', async (req, res) => {
   if (userError || !user) {
     return res.status(400).json({ error: 'User nicht gefunden.' });
   }
-  
+
   console.log("UserID:"+user.uid);
-  console.log("UserID:"+user.username);
+  console.log("Username:"+user.username);
 
   try {
     // Zahlung bei Pi Network erstellen
@@ -72,7 +72,6 @@ app.post('/create-payment', async (req, res) => {
       amount,
       memo,
       metadata: { 
-        uid: user.uid,
         username: user.username 
       },
       user_uid: user.uid  // uid ist bereits die Pi Network User ID
