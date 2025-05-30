@@ -191,15 +191,15 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   }
 
   try {
-    // 🔐 Signierte txid erstellen
+    // 1. Signierte TXID generieren
     const txid = jwt.sign(
       { payment_id: paymentId },
       process.env.APP_SECRET_KEY_TESTNET,
-      { algorithm: 'HS256' }
+      { algorithm: 'HS256', expiresIn: '5m' }  // Gültigkeit begrenzen
     );
     console.log("🧾 Generierte txid:", txid);
 
-    // ⛓️ Zahlung bei Pi abschließen
+    // 2. Zahlung bei Pi abschließen
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
@@ -207,60 +207,47 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
         headers: {
           Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 10000  // Timeout hinzufügen
       }
     );
 
     const payment = piResponse.data;
-    console.log("🔔 Antwort von Pi Network:", payment);
+    
+    // 3. Kritische Validierung
+    if (!payment.status?.developer_completed) {
+      throw new Error('Pi Server: developer_completed nicht gesetzt');
+    }
 
-    // 📦 Relevante Daten extrahieren
-    const uid = payment?.user_uid || null;
-    const username = payment?.metadata?.username || null;
-    const senderWallet = payment?.from_address || null;
-    const amount = payment?.amount?.toString() || null;
-    const memo = payment?.memo || null;
+    // 4. Daten extrahieren mit Fallbacks
+    const uid = payment.user_uid;
+    const username = payment.metadata?.username || null;
+    const senderWallet = payment.from_address;
+    const amount = payment.amount.toString();
+    const memo = payment.memo || '';
     
     const {
       developer_approved = false,
       transaction_verified = false,
       developer_completed = false
-    } = payment?.status || {};
+    } = payment.status;
 
-    // ❗ Wichtige Validierung
-    if (!uid) {
-      return res.status(400).json({ error: 'UID fehlt in Zahlungsdaten' });
-    }
-
-    // 🔎 Existierende Zahlung prüfen (inkl. Status)
-    const { data: existingPayment, error: fetchError } = await supabase
-      .from('payments')
-      .select('status, transaction_verified')
-      .eq('payment_id', paymentId)
-      .maybeSingle();
-
-    if (fetchError) {
-      console.error("❌ Supabase Lese-Fehler:", fetchError);
-      return res.status(500).json({ error: 'Datenbankabfrage fehlgeschlagen' });
-    }
-
-    // 🛡️ Verhinderung des Überschreibens verifizierter Transaktionen
-    if (existingPayment?.transaction_verified) {
-      console.warn("⚠️ Zahlung bereits verifiziert, keine Aktualisierung:", paymentId);
-      return res.json({ 
-        status: 'verified',
-        warning: 'Zahlung wurde bereits verifiziert' 
-      });
-    }
-
-    // 🏷️ Dynamischen Status bestimmen
+    // 5. Dynamischen Status bestimmen
     const paymentStatus = transaction_verified 
       ? 'verified' 
       : developer_completed 
         ? 'completed' 
         : 'pending';
 
-    // 📥 Datenobjekt für Update/Insert
+    // 6. Datenbankoperation
+    const { data: existing, error: fetchError } = await supabase
+      .from('payments')
+      .select('payment_id, status')
+      .eq('payment_id', paymentId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
     const paymentData = {
       payment_id: paymentId,
       status: paymentStatus,
@@ -273,47 +260,37 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       metadata: payment.metadata || null,
       developer_approved,
       transaction_verified,
-      developer_completed
+      developer_completed,
+      last_updated: new Date().toISOString()
     };
 
-    // 🔄 Datenbankoperation
-    let dbError;
-    if (existingPayment) {
-      // ✅ Vorhandenen Datensatz aktualisieren
-      const { error } = await supabase
-        .from('payments')
-        .update(paymentData)
-        .eq('payment_id', paymentId);
-      dbError = error;
-    } else {
-      // ➕ Neuen Datensatz erstellen
-      const { error } = await supabase
-        .from('payments')
-        .insert([paymentData]);
-      dbError = error;
-    }
+    // 7. Update oder Insert
+    const { error: dbError } = existing 
+      ? await supabase.from('payments').update(paymentData).eq('payment_id', paymentId)
+      : await supabase.from('payments').insert([paymentData]);
 
-    if (dbError) {
-      console.error("❌ Supabase Schreibfehler:", dbError);
-      return res.status(500).json({ error: 'Zahlung konnte nicht gespeichert werden' });
-    }
+    if (dbError) throw dbError;
 
-    console.log(`✅ Zahlung [${paymentStatus}]:`, paymentId);
-    res.json({ status: paymentStatus });
+    console.log(`✅ Zahlung [${paymentStatus}] gespeichert:`, paymentId);
+    res.json({ 
+      status: paymentStatus,
+      pi_status: payment.status
+    });
 
   } catch (error) {
-    // 🧩 Axios Fehler extrahieren
-    const piError = error.response?.data?.error || error.response?.data?.message;
-    const errorMessage = piError || error.message;
+    // 8. Präzise Fehlerbehandlung
+    const errorDetails = error.response?.data || error.message;
+    const statusCode = error.response?.status || 500;
     
-    console.error("❌ Kritischer Fehler in /complete-payment:", {
-      url: error.config?.url,
-      status: error.response?.status,
-      error: errorMessage
+    console.error(`❌ /complete-payment Fehler [${statusCode}]:`, {
+      paymentId,
+      error: errorDetails,
+      stack: error.stack
     });
-    
-    res.status(500).json({ 
-      error: piError ? `Pi API Fehler: ${piError}` : errorMessage 
+
+    res.status(statusCode > 400 ? statusCode : 500).json({
+      error: 'Zahlungsabschluss fehlgeschlagen',
+      details: errorDetails
     });
   }
 });
