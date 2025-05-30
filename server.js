@@ -13,6 +13,8 @@ const supabase = createClient(
 );
 
 const app = express();
+app.use(express.json());
+
 const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = [
@@ -41,71 +43,62 @@ const validateApiKey = (req, res, next) => {
 };
 
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
-app.post('/create-payment', validateApiKey, async (req, res) => {
+
+app.post('/create-payment', async (req, res) => {
+  const { uid, amount, memo } = req.body;
+
+  // Get user info
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('username, wallet_address')
+    .eq('uid', uid)
+    .single();
+
+  if (userError || !user) {
+    return res.status(400).json({ error: 'User not found.' });
+  }
+
+  // Step 1: Create payment request via Pi Network
   try {
-    const { to, amount, memo, metadata } = req.body;
+    const paymentData = {
+      amount,
+      memo,
+      metadata: { uid, username: user.username },
+      to_address: user.wallet_address,
+    };
 
-    // 🛑 Eingaben prüfen
-    if (!to || !amount) {
-      return res.status(400).json({ error: '"to" (Pi-Username) und "amount" sind erforderlich.' });
-    }
-    console.log("To:" + to);
-    // 🔍 Nutzer mit Pi-Username aus Supabase laden
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('uid, username')
-      .eq('username', to)
-      .single();
-
-    if (error || !user) {
-      return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
-    }
-
-    if (!user.uid) {
-      return res.status(400).json({ error: 'Benutzer hat keine gespeicherte uid.' });
-    }
-    console.log("uid:" + user.uid);
-    console.log("username:" + user.username);
-    
-    // 📤 Zahlung via Pi Network API initiieren
-    const response = await axios.post(
-      'https://api.minepi.com/v2/payments',
-      {
-        to: user.uid,
-        amount,
-        memo: memo || "App-to-User Auszahlung",
-        metadata: {
-          purpose: 'app_to_user',
-          ...(metadata || {})
-        }, 
+    const piResponse = await axios.post('https://api.minepi.com/v2/payments', paymentData, {
+      headers: {
+        Authorization: `Key ${PI_API_KEY_TESTNET}`,
+        'Content-Type': 'application/json',
       },
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    const payment = response.data;
-    console.log(`✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.username}`);
-
-    return res.status(200).json({
-      success: true,
-      payment_id: payment.identifier,
-      payment
     });
 
-  } catch (error) {
-    const err = error.response?.data || error.message;
-    const code = error.response?.status || 500;
+    const piPayment = piResponse.data;
 
-    console.error(`❌ Fehler bei /create-payment:`, err);
-    return res.status(code).json({ error: err });
+    // Step 2: Store transaction in Supabase
+    const { error: txError } = await supabase.from('transactions').insert([
+      {
+        pi_payment_id: piPayment.identifier,
+        wallet_address: user.wallet_address,
+        amount: amount.toString(),
+        memo,
+        status: 'pending',
+        username: user.username,
+        uid: uid,
+      },
+    ]);
+
+    if (txError) {
+      return res.status(500).json({ error: 'Failed to log transaction.' });
+    }
+
+    res.json({ success: true, payment_id: piPayment.identifier });
+  } catch (err) {
+    console.error('Payment Error:', err.message);
+    res.status(500).json({ error: 'Failed to initiate payment.' });
   }
 });
-
-
 
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
