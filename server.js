@@ -7,6 +7,9 @@ import axios from 'axios';
 
 import { createClient } from '@supabase/supabase-js';
 
+const PI_API_KEY_TESTNET = process.env.PI_API_KEY_TESTNET;
+
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
