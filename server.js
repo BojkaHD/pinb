@@ -90,14 +90,15 @@ app.post('/createPayment', async (req, res) => {
 
     console.log("Stoppunkt nach PiPayment-ResponseData");
 
-    const { error: txError } = await supabase.from('transactions').insert([
-      {
-        pi_payment_id: piPayment.identifier,
-        amount: amount.toString(),
-        memo,
-        status: 'pending',
-        uid: user.uid,
-      }
+    const { error: txError } = await supabase.from('payments').insert([
+    {
+    payment_id: piPayment.identifier,
+    uid: user.uid,
+    sender: 'App', // oder leer lassen, wenn nicht relevant
+    amount: parseFloat(amount), // wichtig: numerisch speichern
+    status: 'pending',
+    metadata: { memo }, // optional: weitere Daten hier rein
+    }
     ]);
 
     if (txError) {
@@ -217,16 +218,12 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     }
 
     // 2️⃣ Transaktion aktualisieren in Supabase
-    const { error: updateError } = await supabase
-      .from('transactions')
-      .update({
-        txid,
-        status: 'completed',
-        wallet_address: senderWallet,
-        amount,
-        memo
+    const { error: updateError } = await supabase.from('payments').update({
+      status: 'completed',
+      sender: payment.from_address || null,
+      metadata: payment.metadata || null
       })
-      .eq('pi_payment_id', paymentId);
+      .eq('payment_id', paymentId);
 
     if (updateError) {
       console.error("❌ Supabase Fehler:", updateError);
