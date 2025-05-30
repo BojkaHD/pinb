@@ -41,7 +41,7 @@ const validateApiKey = (req, res, next) => {
 };
 
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
-app.post('/create_payment', validateApiKey, async (req, res) => {
+app.post('/submit_payment', validateApiKey, async (req, res) => {
   try {
     const { to, amount, memo, metadata } = req.body;
     console.log(to);
