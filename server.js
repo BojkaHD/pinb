@@ -49,7 +49,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     if (!to || !amount) {
       return res.status(400).json({ error: '"to" (Pi-Username) und "amount" sind erforderlich.' });
     }
-
+    console.log("To:" + to);
     // 🔍 Nutzer mit Pi-Username aus Supabase laden
     const { data: user, error } = await supabase
       .from('users')
@@ -67,7 +67,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     console.log("User:" + user.pi_user_id + user.pi_username);
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${user.pi_user_id}/create`,
+      `https://api.minepi.com/v2/payments/create`,
       {
         to: user.pi_user_id,
         amount,
