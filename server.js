@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
+import jwt from 'jsonwebtoken';
 
 import { createClient } from '@supabase/supabase-js';
 
