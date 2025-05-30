@@ -181,19 +181,24 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
+const jwt = require('jsonwebtoken');
 
-
-// complete-payment Route
-// ✅ Route zum Abschluss der Zahlung
 app.post('/complete-payment', validateApiKey, async (req, res) => {
-  const { paymentId, txid } = req.body;
+  const { paymentId } = req.body;
 
-  if (!paymentId || !txid) {
-    return res.status(400).json({ error: 'paymentId und txid erforderlich' });
+  if (!paymentId) {
+    return res.status(400).json({ error: 'paymentId erforderlich' });
   }
 
   try {
-    // 1️⃣ Zahlung bei Pi Network bestätigen
+    // 🔐 Signiere txid mit App Secret
+    const txid = jwt.sign(
+      { payment_id: paymentId },
+      process.env.APP_SECRET_KEY_TESTNET,
+      { algorithm: 'HS256' }
+    );
+
+    // ✅ Abschluss bei Pi Network
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
@@ -207,30 +212,38 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
 
     const payment = piResponse.data;
 
+    // 👤 Userdaten extrahieren
+    const uid = payment?.user_uid;
     const username = payment?.metadata?.username || null;
-    const uid = payment?.metadata?.uid || null;
     const senderWallet = payment?.from_address || null;
     const amount = payment?.amount?.toString() || '1';
     const memo = payment?.memo || 'donation';
 
-    if (!username || !uid) {
-      return res.status(400).json({ error: 'Fehlende Nutzerdaten in metadata' });
+    if (!uid || !username) {
+      return res.status(400).json({ error: 'Fehlende UID oder Username in metadata' });
     }
 
-    // 2️⃣ Transaktion aktualisieren in Supabase
-    const { error: updateError } = await supabase.from('payments').update({
-      status: 'completed',
-      sender: payment.from_address || null,
-      metadata: payment.metadata || null
+    // 🗂️ In Supabase speichern
+    const { error: updateError } = await supabase
+      .from('payments')
+      .update({
+        status: 'completed',
+        txid: txid,
+        sender: senderWallet,
+        amount: amount,
+        memo: memo,
+        uid: uid,
+        username: username,
+        metadata: payment.metadata || null
       })
       .eq('payment_id', paymentId);
 
     if (updateError) {
       console.error("❌ Supabase Fehler:", updateError);
-      return res.status(500).json({ error: 'Fehler beim Speichern der Transaktion' });
+      return res.status(500).json({ error: 'Fehler beim Speichern der Zahlung' });
     }
 
-    console.log("✅ Spende erfolgreich gespeichert:", paymentId);
+    console.log("✅ Zahlung abgeschlossen:", paymentId);
     res.json({ status: 'completed' });
 
   } catch (error) {
@@ -238,6 +251,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
