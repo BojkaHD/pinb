@@ -62,6 +62,9 @@ app.post('/create-payment', async (req, res) => {
   if (userError || !user) {
     return res.status(400).json({ error: 'User nicht gefunden.' });
   }
+  
+  console.log("UserID:"+user.uid);
+  console.log("UserID:"+user.username);
 
   try {
     // Zahlung bei Pi Network erstellen
