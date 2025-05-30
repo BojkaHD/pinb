@@ -183,6 +183,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 
 
 // complete-payment Route
+// ✅ Route zum Abschluss der Zahlung
 app.post('/complete-payment', validateApiKey, async (req, res) => {
   const { paymentId, txid } = req.body;
 
@@ -191,6 +192,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   }
 
   try {
+    // 1️⃣ Zahlung bei Pi Network bestätigen
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
@@ -203,29 +205,35 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = piResponse.data;
-    const username = payment?.metadata?.username;
+
+    const username = payment?.metadata?.username || null;
     const uid = payment?.metadata?.uid || null;
     const senderWallet = payment?.from_address || null;
+    const amount = payment?.amount?.toString() || '1';
+    const memo = payment?.memo || 'donation';
 
-    if (!username) {
-      return res.status(400).json({ error: 'Fehlender Username in metadata' });
+    if (!username || !uid) {
+      return res.status(400).json({ error: 'Fehlende Nutzerdaten in metadata' });
     }
 
-    // Transaktion abschließend aktualisieren
+    // 2️⃣ Transaktion aktualisieren in Supabase
     const { error: updateError } = await supabase
       .from('transactions')
       .update({
-        txid: txid,
+        txid,
         status: 'completed',
         wallet_address: senderWallet,
-        amount: payment.amount?.toString() || '1',
-        memo: payment.memo || 'donation'
+        amount,
+        memo
       })
       .eq('pi_payment_id', paymentId);
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      console.error("❌ Supabase Fehler:", updateError);
+      return res.status(500).json({ error: 'Fehler beim Speichern der Transaktion' });
+    }
 
-    console.log("✅ Spende gespeichert:", paymentId);
+    console.log("✅ Spende erfolgreich gespeichert:", paymentId);
     res.json({ status: 'completed' });
 
   } catch (error) {
@@ -233,6 +241,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 
