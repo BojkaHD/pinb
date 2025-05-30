@@ -129,7 +129,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       throw new Error("paymentId fehlt");
     }
 
-    // Genehmigung bei Pi
+    // ✅ Zahlung bei Pi genehmigen
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
@@ -142,20 +142,25 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     );
 
     const piData = response.data;
+
     const uid = piData?.user_uid;
     const username = piData?.metadata?.username || null;
-    const wallet_address = piData?.metadata?.wallet_address || null;
+    const wallet_address = piData?.from_address || null; // ✅ SPENDER-Adresse!
+    const amount = piData?.amount?.toString() || null;
+    const memo = piData?.memo || null;
 
-    if (!uid || !username) {
-      throw new Error("UID oder Username fehlen in der Pi-Antwort");
+    if (!uid || !username || !amount) {
+      throw new Error("❌ Fehlende Pflichtdaten in Pi-Zahlungsdaten");
     }
 
-    // Transaktion in Supabase speichern
+    // 🔄 Supabase: Als approved eintragen oder updaten
     const { error } = await supabase.from('transactions').upsert({
       pi_payment_id: paymentId,
       uid,
       username,
-      wallet_address: wallet_address || null,
+      wallet_address,
+      amount,
+      memo,
       status: 'approved'
     }, {
       onConflict: ['pi_payment_id']
@@ -174,6 +179,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     res.status(error.response?.status || 500).json({ error: piError });
   }
 });
+
 
 
 // complete-payment Route
