@@ -191,12 +191,14 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   }
 
   try {
+    // ✅ Sichere txid generieren (Standardstruktur laut Pi Doku)
     const txid = jwt.sign(
       { payment_id: paymentId },
       process.env.APP_SECRET_KEY_TESTNET,
       { algorithm: 'HS256' }
     );
 
+    // ✅ Zahlung bei Pi abschließen
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
@@ -210,18 +212,21 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
 
     const payment = piResponse.data;
 
-    // 👤 Userdaten extrahieren
-    const uid = payment?.user_uid;
+    // ✅ Daten extrahieren
+    const uid = payment?.user_uid || null;
     const username = payment?.metadata?.username || null;
     const senderWallet = payment?.from_address || null;
     const amount = payment?.amount?.toString() || '1';
     const memo = payment?.memo || 'donation';
 
+    const transactionVerified = payment?.status?.transaction_verified || false;
+    const developerCompleted = payment?.status?.developer_completed || false;
+
     if (!uid || !username) {
       return res.status(400).json({ error: 'Fehlende UID oder Username in metadata' });
     }
 
-    // 🗂️ In Supabase speichern
+    // ✅ In Supabase speichern
     const { error: updateError } = await supabase
       .from('payments')
       .update({
@@ -232,7 +237,9 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
         memo: memo,
         uid: uid,
         username: username,
-        metadata: payment.metadata || null
+        metadata: payment.metadata || null,
+        transaction_verified: transactionVerified,
+        developer_completed: developerCompleted
       })
       .eq('payment_id', paymentId);
 
@@ -249,6 +256,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: error.response?.data || error.message });
   }
 });
+
 
 
 
