@@ -212,6 +212,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = piResponse.data;
+    console.log("🔔 Antwort von Pi Network:", payment);
 
     // 📦 Relevante Daten extrahieren
     const uid = payment?.user_uid || null;
@@ -219,31 +220,50 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     const senderWallet = payment?.from_address || null;
     const amount = payment?.amount?.toString() || null;
     const memo = payment?.memo || null;
+    
+    const {
+      developer_approved = false,
+      transaction_verified = false,
+      developer_completed = false
+    } = payment?.status || {};
 
-    const developerApproved = payment?.status?.developer_approved || false;
-    const transactionVerified = payment?.status?.transaction_verified || false;
-    const developerCompleted = payment?.status?.developer_completed || false;
-
+    // ❗ Wichtige Validierung
     if (!uid) {
-      return res.status(400).json({ error: 'UID fehlt' });
+      return res.status(400).json({ error: 'UID fehlt in Zahlungsdaten' });
     }
 
-    // 🔎 Prüfen, ob Zahlung bereits existiert
-    const existing = await supabase
+    // 🔎 Existierende Zahlung prüfen (inkl. Status)
+    const { data: existingPayment, error: fetchError } = await supabase
       .from('payments')
-      .select('payment_id')
+      .select('status, transaction_verified')
       .eq('payment_id', paymentId)
       .maybeSingle();
 
-    if (existing.error) {
-      console.error("❌ Fehler beim Lesen von Supabase:", existing.error);
-      return res.status(500).json({ error: 'Fehler beim Lesen der Datenbank' });
+    if (fetchError) {
+      console.error("❌ Supabase Lese-Fehler:", fetchError);
+      return res.status(500).json({ error: 'Datenbankabfrage fehlgeschlagen' });
     }
 
-    // 🔄 Datenobjekt für Update/Insert
-    const updateData = {
+    // 🛡️ Verhinderung des Überschreibens verifizierter Transaktionen
+    if (existingPayment?.transaction_verified) {
+      console.warn("⚠️ Zahlung bereits verifiziert, keine Aktualisierung:", paymentId);
+      return res.json({ 
+        status: 'verified',
+        warning: 'Zahlung wurde bereits verifiziert' 
+      });
+    }
+
+    // 🏷️ Dynamischen Status bestimmen
+    const paymentStatus = transaction_verified 
+      ? 'verified' 
+      : developer_completed 
+        ? 'completed' 
+        : 'pending';
+
+    // 📥 Datenobjekt für Update/Insert
+    const paymentData = {
       payment_id: paymentId,
-      status: 'completed',
+      status: paymentStatus,
       txid,
       sender: senderWallet,
       amount,
@@ -251,41 +271,50 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       uid,
       username,
       metadata: payment.metadata || null,
-      developer_approved: developerApproved,
-      transaction_verified: transactionVerified,
-      developer_completed: developerCompleted
+      developer_approved,
+      transaction_verified,
+      developer_completed
     };
 
-    let updateError;
-
-    if (existing.data) {
-      // ✅ Update, wenn vorhanden
+    // 🔄 Datenbankoperation
+    let dbError;
+    if (existingPayment) {
+      // ✅ Vorhandenen Datensatz aktualisieren
       const { error } = await supabase
         .from('payments')
-        .update(updateData)
+        .update(paymentData)
         .eq('payment_id', paymentId);
-
-      updateError = error;
+      dbError = error;
     } else {
-      // ➕ Insert, wenn nicht vorhanden
+      // ➕ Neuen Datensatz erstellen
       const { error } = await supabase
         .from('payments')
-        .insert([updateData]);
-
-      updateError = error;
+        .insert([paymentData]);
+      dbError = error;
     }
 
-    if (updateError) {
-      console.error("❌ Supabase Fehler:", updateError);
-      return res.status(500).json({ error: 'Fehler beim Speichern der Zahlung' });
+    if (dbError) {
+      console.error("❌ Supabase Schreibfehler:", dbError);
+      return res.status(500).json({ error: 'Zahlung konnte nicht gespeichert werden' });
     }
 
-    console.log("✅ Zahlung erfolgreich abgeschlossen:", paymentId);
-    res.json({ status: 'completed' });
+    console.log(`✅ Zahlung [${paymentStatus}]:`, paymentId);
+    res.json({ status: paymentStatus });
 
   } catch (error) {
-    console.error("❌ Fehler bei /complete-payment:", error.response?.data || error.message);
-    res.status(500).json({ error: error.response?.data || error.message });
+    // 🧩 Axios Fehler extrahieren
+    const piError = error.response?.data?.error || error.response?.data?.message;
+    const errorMessage = piError || error.message;
+    
+    console.error("❌ Kritischer Fehler in /complete-payment:", {
+      url: error.config?.url,
+      status: error.response?.status,
+      error: errorMessage
+    });
+    
+    res.status(500).json({ 
+      error: piError ? `Pi API Fehler: ${piError}` : errorMessage 
+    });
   }
 });
 
