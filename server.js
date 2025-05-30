@@ -40,38 +40,33 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
-// 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
-app.post('/kurac_payment', validateApiKey, async (req, res) => {
+// App-to-User Zahlung erstellen
+app.post('/create-payment', validateApiKey, async (req, res) => {
   try {
     const { to, amount, memo, metadata } = req.body;
-    console.log(to);
-    console.log(amount);
-    console.log(memo);
-    console.log(metadata);
-    // 🛑 Eingaben prüfen
+
+    // 🛑 Validierung
     if (!to || !amount) {
       return res.status(400).json({ error: '"to" (Pi-Username) und "amount" sind erforderlich.' });
     }
 
-    // 🔍 Nutzer mit Pi-Username aus Supabase laden
+    // 🔍 Nutzer anhand Pi-Username aus Supabase holen
     const { data: user, error } = await supabase
       .from('users')
       .select('pi_user_id, pi_username')
       .eq('pi_username', to)
       .single();
-    console.log("User:" + JSON.stringify(user));
 
     if (error || !user) {
       console.log(error);
-      return res.status(404).json({ error: 'Benutzer "${to}" nicht gefunden.' });
+      return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
 
     if (!user.pi_user_id) {
       return res.status(400).json({ error: 'Benutzer hat keine gespeicherte pi_user_id.' });
     }
-    console.log("User der uebergeben wird:" + user.pi_user_id);
 
-    // 📤 Zahlung via Pi Network API initiieren
+    // 📤 Zahlung via Pi API initiieren
     const response = await axios.post(
       'https://api.minepi.com/v2/payments',
       {
@@ -79,54 +74,51 @@ app.post('/kurac_payment', validateApiKey, async (req, res) => {
         memo: memo || "App-to-User Auszahlung",
         metadata: {
           purpose: 'app_to_user',
-          pi_username: user.pi_username,
-        ...(metadata || {})
+          pi_user_id: user.pi_user_id,
+          ...(metadata || {})
         },
         to: user.pi_user_id
       },
       {
         headers: {
-          Authorization: 'Key '+process.env.PI_API_KEY_TESTNET,
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
     );
 
     const payment = response.data;
-    console.log('✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.pi_username}');
+    console.log(`✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.pi_username}`);
 
-// In DB speichern
-const { error: insertError } = await supabase
-  .from('payments')
-  .insert([{
-    sender: metadata?.from || "unknown",
-    recipient_username: user.pi_username,
-    amount,
-    payment_id: payment.identifier,
-    status: payment.status || 'created',
-    metadata
-  }]);
+    // 📝 In Datenbank speichern
+    const { error: insertError } = await supabase
+      .from('payments')
+      .insert([{
+        sender: metadata?.from || "system",
+        recipient_username: user.pi_username,
+        amount,
+        payment_id: payment.identifier,
+        status: payment.status || 'created',
+        metadata
+      }]);
 
-if (insertError) {
-  console.error('⚠️ Zahlung wurde durchgeführt, aber konnte nicht gespeichert werden:', insertError.message);
-}
+    if (insertError) {
+      console.error('⚠️ Zahlung wurde erstellt, aber konnte nicht gespeichert werden:', insertError.message);
+    }
 
-return res.status(200).json({
-  success: true,
-  payment_id: payment.identifier,
-  payment
-});
+    return res.status(200).json({
+      success: true,
+      payment_id: payment.identifier,
+      payment
+    });
 
-  
   } catch (error) {
     const err = error.response?.data || error.message;
     const code = error.response?.status || 500;
-
     console.error('❌ Fehler bei /create-payment:', err);
     return res.status(code).json({ error: err });
   }
 });
-
 
 
 app.post('/approve-payment', validateApiKey, async (req, res) => {
