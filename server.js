@@ -56,7 +56,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
       .select('pi_user_id, pi_username')
       .eq('pi_user_id', to)
       .single();
-
+    console.log("User:" + user.pi_user_id + user.pi_username);
     if (error || !user) {
       return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
