@@ -182,9 +182,10 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 });
 
 import jwt from 'jsonwebtoken';
-
-import jwt from 'jsonwebtoken';
 import axios from 'axios';
+
+// ENTFERNE DIESE ZEILE: import jwt from 'jsonwebtoken';
+// (jwt ist bereits in server.js importiert)
 
 app.post('/complete-payment', validateApiKey, async (req, res) => {
   const { paymentId } = req.body;
@@ -369,6 +370,8 @@ async function checkPaymentStatus(paymentId) {
     return false;
   }
 }
+
+
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId } = req.body;
