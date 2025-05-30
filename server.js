@@ -219,6 +219,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     const amount = payment?.amount?.toString() || '1';
     const memo = payment?.memo || 'donation';
 
+    const developerApproved = payment?.status?.developer_approved || false;
     const transactionVerified = payment?.status?.transaction_verified || false;
     const developerCompleted = payment?.status?.developer_completed || false;
 
@@ -238,6 +239,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
         uid: uid,
         username: username,
         metadata: payment.metadata || null,
+        developer_approved: developerApproved,
         transaction_verified: transactionVerified,
         developer_completed: developerCompleted
       })
