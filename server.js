@@ -67,7 +67,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     console.log("User:" + user.pi_user_id + user.pi_username);
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/create`,
+      `https://api.minepi.com/v2/payments`,
       {
         to: user.pi_user_id,
         amount,
