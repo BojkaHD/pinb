@@ -73,6 +73,8 @@ app.post('/payments', async (req, res) => {
       }
     };
 
+    console.log("Stoppunkt nach PaymentData");
+
     const piResponse = await axios.post(
       'https://api.minepi.com/v2/payments',
       paymentData,
@@ -86,6 +88,8 @@ app.post('/payments', async (req, res) => {
 
     const piPayment = piResponse.data;
 
+    console.log("Stoppunkt nach PiPayment-ResponseData");
+
     const { error: txError } = await supabase.from('transactions').insert([
       {
         pi_payment_id: piPayment.identifier,
@@ -93,7 +97,6 @@ app.post('/payments', async (req, res) => {
         memo,
         status: 'pending',
         uid: user.uid,
-        username: user.username
       }
     ]);
 
