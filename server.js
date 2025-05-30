@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -39,58 +40,43 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
-// App-to-User Zahlung erstellen
+// 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
 app.post('/create-payment', validateApiKey, async (req, res) => {
-  let user = null; // Deklariere user hier
-  
   try {
     const { to, amount, memo, metadata } = req.body;
 
-    // 🛑 Validierung
+    // 🛑 Eingaben prüfen
     if (!to || !amount) {
       return res.status(400).json({ error: '"to" (Pi-Username) und "amount" sind erforderlich.' });
     }
 
-    // 🔍 Nutzer anhand Pi-Username aus Supabase holen
-    const { data: userData, error: userError } = await supabase
+    // 🔍 Nutzer mit Pi-Username aus Supabase laden
+    const { data: user, error } = await supabase
       .from('users')
       .select('pi_user_id, pi_username')
       .eq('pi_username', to)
       .single();
 
-    if (userError || !userData) {
-      console.error('Benutzerabfragefehler:', userError?.message || 'Benutzer nicht gefunden');
+    if (error || !user) {
       return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
-
-    user = userData;
 
     if (!user.pi_user_id) {
       return res.status(400).json({ error: 'Benutzer hat keine gespeicherte pi_user_id.' });
     }
 
-    console.log("🔎 Empfänger-UID (to):", user.pi_user_id);
-    console.log("✅ Pi UID an Pi API senden:", user.pi_user_id);
-
-    // KORREKTUR: Verwende 'user_uid' statt 'to'
-    const paymentData = {
-      amount: Number(amount),
-      memo: memo || "App-to-User Auszahlung",
-      metadata: {
-        purpose: 'app_to_user',
-        pi_username: user.pi_username,
-        pi_user_id: user.pi_user_id,
-        ...(metadata || {})
-      },
-      user_uid: user.pi_user_id // WICHTIG: Korrekter Parameter laut Pi API
-    };
-
-    console.log("📤 Sende an Pi API:", JSON.stringify(paymentData, null, 2));
-
-    // 📤 Zahlung via Pi API initiieren
+    // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${user.pi_user_id}/create-payment`,
-      paymentData,
+      'https://api.minepi.com/v2/payments',
+      {
+        to: user.pi_username,
+        uid: user.pi_user_id,
+        amount,
+        memo: memo || "App-to-User Auszahlung",
+        metadata: {
+          purpose: 'app_to_user'
+        }, 
+      },
       {
         headers: {
           Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
@@ -102,25 +88,6 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     const payment = response.data;
     console.log(`✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.pi_username}`);
 
-    // 📝 In Datenbank speichern
-    const { error: insertError } = await supabase
-      .from('payments')
-      .insert([{
-        sender: metadata?.from || "system",
-        recipient_username: user.pi_username,
-        amount,
-        payment_id: payment.identifier,
-        status: payment.status || 'created',
-        metadata: {
-          ...metadata,
-          pi_user_id: user.pi_user_id
-        }
-      }]);
-
-    if (insertError) {
-      console.error('⚠️ Zahlung wurde erstellt, aber konnte nicht gespeichert werden:', insertError.message);
-    }
-
     return res.status(200).json({
       success: true,
       payment_id: payment.identifier,
@@ -130,30 +97,13 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
   } catch (error) {
     const err = error.response?.data || error.message;
     const code = error.response?.status || 500;
-    
-    console.error('❌ Fehler bei /create-payment:', JSON.stringify(err, null, 2));
-    
-    // Debug-Informationen
-    if (user) {
-      console.error(`⚠️ Gesendete UID: ${user.pi_user_id}`);
-      console.error(`⚠️ Gesendeter Username: ${user.pi_username}`);
-    } else {
-      console.error('⚠️ Kein Benutzerobjekt vorhanden');
-    }
-    
-    console.error(`⚠️ API-Key: ${process.env.PI_API_KEY_TESTNET ? 'Vorhanden' : 'Fehlt'}`);
-    console.error(`⚠️ Vollständiger Fehler:`, error.stack);
-    
-    return res.status(code).json({ 
-      error: err,
-      debug: {
-        sent_uid: user?.pi_user_id,
-        sent_username: user?.pi_username,
-        api_key_status: !!process.env.PI_API_KEY_TESTNET
-      }
-    });
+
+    console.error(`❌ Fehler bei /create-payment:`, err);
+    return res.status(code).json({ error: err });
   }
 });
+
+
 
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
