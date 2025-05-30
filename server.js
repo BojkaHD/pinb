@@ -182,8 +182,6 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-const jwt = require('jsonwebtoken');
-
 app.post('/complete-payment', validateApiKey, async (req, res) => {
   const { paymentId } = req.body;
 
