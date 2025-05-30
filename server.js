@@ -56,7 +56,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
       .select('pi_user_id, pi_username')
       .eq('pi_user_id', to)
       .single();
-    console.log("User:" + user.pi_user_id + user.pi_username);
+
     if (error || !user) {
       return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
@@ -64,7 +64,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     if (!user.pi_user_id) {
       return res.status(400).json({ error: 'Benutzer hat keine gespeicherte pi_user_id.' });
     }
-
+    console.log("User:" + user.pi_user_id + user.pi_username);
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${user.pi_user_id}/create`,
