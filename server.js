@@ -123,13 +123,13 @@ app.post('/createPayment', async (req, res) => {
 // approve-payment Route
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
-    const { paymentId, uid, username, wallet_address } = req.body;
+    const { paymentId } = req.body;
 
-    if (!paymentId || !uid || !username || !wallet_address) {
-      throw new Error("Erforderliche Daten fehlen");
+    if (!paymentId) {
+      throw new Error("paymentId fehlt");
     }
 
-    // Zahlung bei Pi genehmigen
+    // Genehmigung bei Pi
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
@@ -141,12 +141,21 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       }
     );
 
-    // Transaktion als 'approved' speichern (nur status und wallet)
+    const piData = response.data;
+    const uid = piData?.user_uid;
+    const username = piData?.metadata?.username || null;
+    const wallet_address = piData?.metadata?.wallet_address || null;
+
+    if (!uid || !username) {
+      throw new Error("UID oder Username fehlen in der Pi-Antwort");
+    }
+
+    // Transaktion in Supabase speichern
     const { error } = await supabase.from('transactions').upsert({
       pi_payment_id: paymentId,
       uid,
       username,
-      wallet_address, // Spender-Wallet
+      wallet_address: wallet_address || null,
       status: 'approved'
     }, {
       onConflict: ['pi_payment_id']
@@ -157,13 +166,15 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       return res.status(500).json({ error: "Speichern in Supabase fehlgeschlagen" });
     }
 
-    res.json({ status: 'approved', piData: response.data });
+    res.json({ status: 'approved', piData });
+
   } catch (error) {
     const piError = error.response?.data || error.message;
     console.error("APPROVE ERROR:", piError);
     res.status(error.response?.status || 500).json({ error: piError });
   }
 });
+
 
 // complete-payment Route
 app.post('/complete-payment', validateApiKey, async (req, res) => {
