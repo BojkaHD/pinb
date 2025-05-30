@@ -48,9 +48,9 @@ const validateApiKey = (req, res, next) => {
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
 
 app.post('/create-payment', async (req, res) => {
-  const { uid, amount, memo, pi_uid } = req.body; // pi_uid wird jetzt im Request erwartet
+  const { uid, amount, memo } = req.body;
 
-  // User-Daten abrufen
+  // User-Daten abrufen (uid ist bereits die Pi Network user_uid)
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('username')
@@ -70,7 +70,7 @@ app.post('/create-payment', async (req, res) => {
         uid,
         username: user.username 
       },
-      user_uid: pi_uid  // Pi User ID aus dem Request
+      user_uid: uid  // uid ist bereits die Pi Network User ID
     };
 
     const piResponse = await axios.post(
@@ -93,8 +93,7 @@ app.post('/create-payment', async (req, res) => {
         amount: amount.toString(),
         memo,
         status: 'pending',
-        uid: uid,
-        user_pi_uid: pi_uid,  // Aus Request speichern
+        uid: uid,  // Pi Network User ID
         username: user.username
       }
     ]);
