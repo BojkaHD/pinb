@@ -4,7 +4,6 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
-import jwt from 'jsonwebtoken';
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -182,6 +181,8 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
+import jwt from 'jsonwebtoken';
+
 app.post('/complete-payment', validateApiKey, async (req, res) => {
   const { paymentId } = req.body;
 
@@ -190,14 +191,12 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   }
 
   try {
-    // 🔐 Signiere txid mit App Secret
     const txid = jwt.sign(
       { payment_id: paymentId },
       process.env.APP_SECRET_KEY_TESTNET,
       { algorithm: 'HS256' }
     );
 
-    // ✅ Abschluss bei Pi Network
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
