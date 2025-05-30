@@ -53,23 +53,23 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     // 🔍 Nutzer mit Pi-Username aus Supabase laden
     const { data: user, error } = await supabase
       .from('users')
-      .select('pi_user_id, pi_username')
-      .eq('pi_username', to)
+      .select('uid, username')
+      .eq('username', to)
       .single();
 
     if (error || !user) {
       return res.status(404).json({ error: `Benutzer "${to}" nicht gefunden.` });
     }
 
-    if (!user.pi_user_id) {
-      return res.status(400).json({ error: 'Benutzer hat keine gespeicherte pi_user_id.' });
+    if (!user.uid) {
+      return res.status(400).json({ error: 'Benutzer hat keine gespeicherte uid.' });
     }
-    console.log("User:" + user.pi_user_id + user.pi_username);
+    console.log("User:" + user.uid + user.username);
     // 📤 Zahlung via Pi Network API initiieren
     const response = await axios.post(
       `https://api.minepi.com/v2/payments`,
       {
-        to: user.pi_user_id,
+        to: user.uid,
         amount,
         memo: memo || "App-to-User Auszahlung",
         metadata: {
@@ -86,7 +86,7 @@ app.post('/create-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = response.data;
-    console.log(`✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.pi_username}`);
+    console.log(`✅ Zahlung erstellt: ${payment.identifier} ➜ ${user.username}`);
 
     return res.status(200).json({
       success: true,
@@ -150,8 +150,8 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const payment = piResponse.data;
-    const username = payment?.metadata?.pi_username;
-    const uid = payment?.metadata?.pi_user_id || null;
+    const username = payment?.metadata?.username;
+    const uid = payment?.metadata?.uid || null;
 
     if (!username) {
       return res.status(400).json({ error: 'Fehlender Username in metadata' });
@@ -161,8 +161,8 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       .from('transactions')
       .insert({
         pi_payment_id: paymentId,
-        pi_username: username,
-        pi_user_id: uid, // kann null sein
+        username: username,
+        uid: uid, // kann null sein
         wallet_address: payment.to_address || null,
         amount: payment.amount?.toString() || '1',
         memo: payment.memo || 'donation',
@@ -294,8 +294,8 @@ app.get('/test-user/:username', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('pi_user_id')
-      .eq('pi_username', username)
+      .select('uid')
+      .eq('username', username)
       .single(); // Nur ein Eintrag erwartet
 
     if (error) {
