@@ -48,10 +48,10 @@ const validateApiKey = (req, res, next) => {
 
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
 
-app.post('/createPayment', async (req, res) => {
+app.post('/payments', async (req, res) => {
   const { uid, username, amount, memo } = req.body;
 
-  // User-Daten abrufen (uid ist bereits die Pi Network user_uid)
+  // Benutzer validieren
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('uid, username')
@@ -59,22 +59,24 @@ app.post('/createPayment', async (req, res) => {
     .eq('username', username)
     .single();
 
+  console.log("UserID:"+user.uid);
+  console.log("Username:"+user.username);
+
   if (userError || !user) {
     return res.status(400).json({ error: 'User nicht gefunden.' });
   }
 
-  console.log("UserID:"+user.uid);
-  console.log("Username:"+user.username);
-
   try {
-    // Zahlung bei Pi Network erstellen
     const paymentData = {
-      amount,
-      memo,
-      metadata: { 
-        username: user.username 
-      },
-      user_uid: user.uid  // uid ist bereits die Pi Network User ID
+      payment: {
+        amount,
+        memo,
+        metadata: {
+          username: user.username,
+          origin: "a2u"
+        },
+        uid: user.uid
+      }
     };
 
     const piResponse = await axios.post(
@@ -82,7 +84,7 @@ app.post('/createPayment', async (req, res) => {
       paymentData,
       {
         headers: {
-          Authorization: `Key ${PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY_TESTNET}`, // oder dein Mainnet-Key
           'Content-Type': 'application/json'
         }
       }
@@ -90,14 +92,13 @@ app.post('/createPayment', async (req, res) => {
 
     const piPayment = piResponse.data;
 
-    // Transaktion in Supabase speichern
     const { error: txError } = await supabase.from('transactions').insert([
       {
         pi_payment_id: piPayment.identifier,
         amount: amount.toString(),
         memo,
         status: 'pending',
-        uid: user.uid,  // Pi Network User ID
+        uid: user.uid,
         username: user.username
       }
     ]);
@@ -107,15 +108,15 @@ app.post('/createPayment', async (req, res) => {
       return res.status(500).json({ error: 'Transaktionsspeicherung fehlgeschlagen' });
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       payment_id: piPayment.identifier,
-      approval_url: piPayment.payment_url
+      payment: piPayment
     });
 
   } catch (err) {
     console.error('Zahlungsfehler:', err.response?.data || err.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Zahlung konnte nicht initiiert werden',
       details: err.response?.data || err.message
     });
