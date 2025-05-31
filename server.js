@@ -115,13 +115,13 @@ app.post('/createPayment', async (req, res) => {
   }
 });
 
-import piBackend from 'pi-backend';
+
+import * as piBackend from 'pi-backend';
 
 // ✅ RICHTIG
 const API_KEY = process.env.PI_API_KEY;
 const PRIVATE_SEED = process.env.APP_WALLET_PRIVATE_SEED;
 
-import * as piBackend from 'pi-backend';
 
 const pi = new piBackend.default(API_KEY, PRIVATE_SEED);
 
