@@ -196,15 +196,24 @@ app.post('/complete-payment', async (req, res) => {
     return res.status(400).json({ error: "paymentId oder txid fehlt" });
   }
 
+  const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
+  const API_KEY = process.env.PI_API_KEY_TESTNET;
+
+  if (!SECRET_KEY || !API_KEY) {
+    return res.status(500).json({ error: "Fehlende API oder Secret Keys in .env" });
+  }
+
   try {
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
       {
         headers: {
-          // 🔐 Verwendet den SECRET KEY für die Signatur-Authentifizierung
-          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
+          // App Secret Key ist laut offizieller Doku für /complete zwingend erforderlich
+          Authorization: `Key ${SECRET_KEY}`,
+          'Content-Type': 'application/json',
+          // Optional, falls Pi Network beide Keys prüft (zukunftssicher)
+          'x-api-key': API_KEY
         }
       }
     );
@@ -212,7 +221,7 @@ app.post('/complete-payment', async (req, res) => {
     const paymentDTO = piResponse.data;
     const verified = paymentDTO.transaction?.verified ?? false;
 
-    // 🧾 Supabase Update (nur payments, da App-to-User)
+    // Supabase Update (payments Tabelle)
     const { error: updateError } = await supabase
       .from('payments')
       .update({
@@ -224,6 +233,7 @@ app.post('/complete-payment', async (req, res) => {
       .eq('payment_id', paymentId);
 
     if (updateError) {
+      console.error('❌ Supabase update error:', updateError);
       return res.status(500).json({ error: 'Supabase update fehlgeschlagen' });
     }
 
@@ -231,7 +241,9 @@ app.post('/complete-payment', async (req, res) => {
       success: true,
       payment_id: paymentId,
       txid,
-      status: verified ? 'completed' : 'unverified'
+      status: verified ? 'completed' : 'unverified',
+      verified,
+      piResponse: paymentDTO
     });
 
   } catch (err) {
