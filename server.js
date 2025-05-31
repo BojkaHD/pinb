@@ -180,13 +180,12 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-import PiNetwork from 'pi-backend';
+import piBackend from 'pi-backend';
 
-const pi = new PiNetwork(
+const pi = piBackend(
   process.env.PI_API_KEY,
   process.env.APP_WALLET_PRIVATE_SEED
 );
-
 
 app.post('/submit-payment', async (req, res) => {
   const { paymentId } = req.body;
@@ -221,7 +220,6 @@ app.post('/submit-payment', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 
 // complete-payment Route
