@@ -197,7 +197,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`,
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
