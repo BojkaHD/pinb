@@ -154,7 +154,11 @@ app.post('/submit-payment', async (req, res) => {
       }
     );
 
+    console.log("txid_1:"+txid);
+
     const { txid } = submitResponse.data;
+
+    console.log("txid_2:"+txid);
 
     // 💾 2. txid in Supabase speichern (alte wird überschrieben)
     const { error: dbError } = await supabase
