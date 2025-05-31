@@ -124,8 +124,8 @@ app.post('/submit-payment', async (req, res) => {
     return res.status(400).json({ error: "paymentId fehlt" });
   }
 
-  if (!API_KEY || !PRIVATE_SEED) {
-    return res.status(500).json({ error: "API_KEY oder PRIVATE_SEED fehlt in .env" });
+  if (!API_KEY) {
+    return res.status(500).json({ error: "API_KEY fehlt in .env" });
   }
 
   try {
@@ -186,56 +186,69 @@ app.post('/submit-payment', async (req, res) => {
 
 
 // approve-payment Route
-app.post('/submit-payment', async (req, res) => {
-  const { paymentId } = req.body;
-
-  if (!paymentId) {
-    return res.status(400).json({ error: "paymentId fehlt" });
-  }
-
+app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
-    // 📡 1. Transaktion senden (echte txid wird erstellt)
-    const submitResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/submit`,
+    const { paymentId } = req.body;
+
+    if (!paymentId) {
+      return res.status(400).json({ error: "paymentId fehlt" });
+    }
+    
+    // ✅ WICHTIG: Testnet-URL verwenden
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
       {
         headers: {
-          Authorization: `Key ${process.env.PRIVATE_SEED}`,
-          'Content-Type': 'application/json'
+          // App Secret Key ist laut offizieller Doku für /complete zwingend erforderlich
+          Authorization: `Key ${PRIVATE_SEED}`,
+          'Content-Type': 'application/json',
+          
         }
       }
     );
 
-    const { txid } = submitResponse.data;
+    const piData = response.data;
+    console.log(`✅ Payment ${paymentId} approved`, piData);
 
-    // 💾 2. txid in Supabase speichern (alte wird überschrieben)
-    const { error: dbError } = await supabase
-      .from('payments')
-      .update({ txid })
+    // 🔄 Supabase: Als approved eintragen
+    const { error } = await supabase
+      .from('transactions')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString()
+      })
       .eq('payment_id', paymentId);
 
-    if (dbError) {
-      return res.status(500).json({ error: 'txid speichern fehlgeschlagen', detail: dbError });
-    }
+    if (error) throw error;
 
-    res.json({
+    res.json({ 
       success: true,
-      paymentId,
-      txid,
-      message: "✅ Echte Transaktion gesendet & gespeichert"
+      status: 'approved',
+      paymentId
     });
 
-  } catch (err) {
-    console.error("❌ Fehler bei submit-payment:", err.response?.data || err.message);
-    res.status(500).json({
-      error: err.response?.data?.error || err.message,
-      details: err.response?.data
+  } catch (error) {
+    console.error("❌ APPROVE ERROR:", {
+      message: error.message,
+      url: error.config?.url,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+    
+    // Spezieller Fall: Bereits genehmigt
+    if (error.response?.data?.error === 'already_approved') {
+      return res.json({ 
+        warning: "already_approved",
+        message: "Zahlung wurde bereits genehmigt" 
+      });
+    }
+    
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.error_message || error.message
     });
   }
 });
-
-
-
 
 // complete-payment Route
 app.post('/complete-payment', async (req, res) => {
