@@ -183,16 +183,17 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 
 // complete-payment Route
 app.post('/complete-payment', validateApiKey, async (req, res) => {
-  const { payment_id, txid } = req.body;
+  const { payment_id, txid, paymentId } = req.body;
 
-  if (!payment_id || !txid) {
+  const id = payment_id || paymentId; // beide Varianten unterstützen
+  if (!id || !txid) {
     return res.status(400).json({ error: 'payment_id oder txid fehlt' });
   }
 
   try {
-    // 1️⃣ Complete bei Pi melden
+    // 1️⃣ Bei Pi Network als completed markieren
     const piResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${payment_id}/complete`,
+      `https://api.minepi.com/v2/payments/${id}/complete`,
       { txid },
       {
         headers: {
@@ -203,61 +204,47 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     );
 
     const paymentDTO = piResponse.data;
+    const from_address = paymentDTO.from_address || null;
+    const verified = paymentDTO.transaction?.verified ?? false;
 
-    // 2️⃣ Herausfinden, ob App-to-User oder Donate
-    let targetTable = null;
-
-    const { data: inPayments } = await supabase
+    // 2️⃣ Herausfinden, wo speichern → payments (App2User) oder transactions (Donate)
+    const { data: paymentInPayments } = await supabase
       .from('payments')
       .select('id')
-      .eq('payment_id', payment_id)
+      .eq('payment_id', id)
       .maybeSingle();
 
-    if (inPayments) {
-      targetTable = 'payments';
-    } else {
-      const { data: inTransactions } = await supabase
-        .from('transactions')
-        .select('id')
-        .eq('payment_id', payment_id)
-        .maybeSingle();
-
-      if (inTransactions) {
-        targetTable = 'transactions';
-      }
-    }
-
-    if (!targetTable) {
-      return res.status(404).json({ error: 'Zahlung nicht in Supabase gefunden' });
-    }
+    const table = paymentInPayments ? 'payments' : 'transactions';
 
     // 3️⃣ Supabase aktualisieren
     const { error: updateError } = await supabase
-      .from(targetTable)
+      .from(table)
       .update({
-        txid: txid,
-        status: 'completed'
+        txid,
+        status: verified ? 'completed' : 'unverified',
+        wallet_address: from_address // nur bei Spenden sinnvoll
       })
-      .eq('payment_id', payment_id);
+      .eq('payment_id', id)
+      .select();
 
     if (updateError) {
-      console.error(`❌ Supabase-Fehler in Tabelle ${targetTable}:`, updateError);
-      return res.status(500).json({ error: 'Fehler beim Supabase-Update' });
+      console.error('❌ Supabase Update Fehler:', updateError);
+      return res.status(500).json({ error: 'Supabase update fehlgeschlagen' });
     }
 
     res.json({
       success: true,
       txid,
-      payment_id,
-      table: targetTable,
-      pi_response: paymentDTO
+      status: verified ? 'completed' : 'unverified',
+      source_table: table
     });
 
-  } catch (error) {
-    console.error('❌ Fehler bei complete-payment:', error.response?.data || error.message);
-    res.status(500).json({ error: error.response?.data || error.message });
+  } catch (err) {
+    console.error("❌ Fehler bei Pi Complete:", err.response?.data || err.message);
+    res.status(500).json({ error: err.response?.data || err.message });
   }
 });
+
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
