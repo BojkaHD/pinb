@@ -122,21 +122,22 @@ app.post('/createPayment', async (req, res) => {
 });
 
 // approve-payment Route
+// approve-payment Route
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
     const { paymentId } = req.body;
 
     if (!paymentId) {
-      throw new Error("paymentId fehlt");
+      return res.status(400).json({ error: "paymentId fehlt" });
     }
 
     // ✅ Zahlung bei Pi genehmigen
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${payment_Id}/approve`,
+      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`, // Server Key verwenden
           'Content-Type': 'application/json'
         }
       }
@@ -146,38 +147,73 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 
     const uid = piData?.user_uid;
     const username = piData?.metadata?.username || null;
-    const wallet_address = piData?.from_address || null; // ✅ SPENDER-Adresse!
+    const wallet_address = piData?.from_address || null;
     const amount = piData?.amount?.toString() || null;
     const memo = piData?.memo || null;
 
-    if (!uid || !username || !amount) {
-      throw new Error("❌ Fehlende Pflichtdaten in Pi-Zahlungsdaten");
+    // Prüfen, ob es sich um App-to-User (payments) oder Donate (transactions) handelt
+    const { data: paymentRecord } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('payment_id', paymentId)
+      .maybeSingle();
+
+    const { data: donationRecord } = await supabase
+      .from('transactions')
+      .select('id')
+      .eq('payment_id', paymentId)
+      .maybeSingle();
+
+    let table = null;
+    if (paymentRecord) table = 'payments';
+    if (donationRecord) table = 'transactions';
+    
+    if (!table) {
+      return res.status(404).json({ error: 'Zahlung nicht gefunden' });
     }
 
-    // 🔄 Supabase: Als approved eintragen oder updaten
-    const { error } = await supabase.from('transactions').upsert({
-      payment_id: paymentId,
-      uid,
-      username,
-      wallet_address,
-      amount,
-      memo,
-      status: 'approved'
-    }, {
-      onConflict: ['payment_id']
-    });
+    // 🔄 Supabase aktualisieren
+    const updateData = {
+      status: 'approved',
+      ...(table === 'transactions' && { 
+        uid,
+        username,
+        wallet_address,
+        amount,
+        memo
+      })
+    };
+
+    const { error } = await supabase
+      .from(table)
+      .update(updateData)
+      .eq('payment_id', paymentId);
 
     if (error) {
-      console.error("❌ Supabase Fehler:", error);
-      return res.status(500).json({ error: "Speichern in Supabase fehlgeschlagen" });
+      console.error(`❌ Supabase Update-Fehler [${table}]:`, error);
+      return res.status(500).json({ error: "Supabase update fehlgeschlagen" });
     }
 
-    res.json({ status: 'approved', piData });
+    res.json({ 
+      success: true,
+      status: 'approved',
+      table,
+      piData 
+    });
 
   } catch (error) {
-    const piError = error.response?.data || error.message;
-    console.error("APPROVE ERROR:", piError);
-    res.status(error.response?.status || 500).json({ error: piError });
+    const errorDetails = {
+      message: error.message,
+      url: error.config?.url,
+      status: error.response?.status,
+      data: error.response?.data
+    };
+    
+    console.error("❌ Approve ERROR:", errorDetails);
+    
+    res.status(error.response?.status || 500).json({ 
+      error: error.response?.data?.error_message || error.message 
+    });
   }
 });
 
@@ -191,37 +227,23 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   }
 
   try {
-    // 0️⃣ Payment genehmigen (MUSS vor complete kommen)
-    const approveResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${id}/approve`,
-      {},
-      {
-        headers: {
-          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    console.log(`✅ Payment ${id} approved:`, approveResponse.data);
-
-    // 1️⃣ Payment abschließen
-    const completeResponse = await axios.post(
+    // 1️⃣ Payment bei Pi abschließen
+    const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${id}/complete`,
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`,
+          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`, // Server Key
           'Content-Type': 'application/json'
         }
       }
     );
 
-    const paymentDTO = completeResponse.data;
+    const paymentDTO = piResponse.data;
     const from_address = paymentDTO.from_address || null;
     const verified = paymentDTO.transaction?.verified ?? false;
 
-    // 2️⃣ Unterscheidung zwischen Spenden (transactions) und App-to-User (payments)
+    // 2️⃣ Transaktionstyp identifizieren
     const { data: paymentRecord } = await supabase
       .from('payments')
       .select('id')
@@ -239,26 +261,21 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     if (donationRecord) table = 'transactions';
     
     if (!table) {
-      return res.status(404).json({ error: 'Zahlung in keiner Tabelle gefunden' });
+      return res.status(404).json({ error: 'Zahlung nicht gefunden' });
     }
 
-    // 3️⃣ Supabase aktualisieren mit typspezifischen Feldern
+    // 3️⃣ Supabase mit typspezifischen Daten aktualisieren
     const updateData = {
       txid,
       status: verified ? 'completed' : 'unverified',
-      updated_at: new Date().toISOString()
+      ...(table === 'transactions' && { 
+        wallet_address: from_address,
+        verified
+      }),
+      ...(table === 'payments' && {
+        completed_at: new Date().toISOString()
+      })
     };
-
-    // Zusätzliche Felder für Spenden
-    if (table === 'transactions') {
-      updateData.wallet_address = from_address;
-      updateData.verified = verified;
-    }
-
-    // Zusätzliche Felder für App-to-User
-    if (table === 'payments') {
-      updateData.completed_at = new Date().toISOString();
-    }
 
     const { error: updateError } = await supabase
       .from(table)
@@ -277,27 +294,18 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       status: verified ? 'completed' : 'unverified',
       table,
       verified,
-      from_address,
-      pi: paymentDTO
+      from_address
     });
 
   } catch (err) {
-    // Detaillierte Fehleranalyse
-    const errorInfo = {
+    const errorDetails = {
       message: err.message,
       url: err.config?.url,
       status: err.response?.status,
-      data: err.response?.data,
-      stack: err.stack
+      data: err.response?.data
     };
     
-    console.error("❌ Kritischer Fehler in /complete-payment:", errorInfo);
-    
-    // Spezieller Fall: Payment wurde bereits genehmigt
-    if (err.response?.data?.error === 'already_approved') {
-      console.warn("⚠️ Payment bereits genehmigt, fahre fort...");
-      // Hier könntest du direkt mit /complete fortfahren
-    }
+    console.error("❌ Complete ERROR:", errorDetails);
     
     res.status(err.response?.status || 500).json({ 
       error: err.response?.data?.error_message || err.message,
@@ -305,6 +313,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     });
   }
 });
+
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
