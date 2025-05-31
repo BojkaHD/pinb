@@ -184,71 +184,54 @@ app.post('/submit-payment', async (req, res) => {
 
 
 // approve-payment Route
-app.post('/approve-payment', validateApiKey, async (req, res) => {
+app.post('/submit-payment', async (req, res) => {
+  const { paymentId } = req.body;
+
+  if (!paymentId) {
+    return res.status(400).json({ error: "paymentId fehlt" });
+  }
+
   try {
-    const { paymentId } = req.body;
-
-    if (!paymentId) {
-      return res.status(400).json({ error: "paymentId fehlt" });
-    }
-
-
-    
-    // ✅ WICHTIG: Testnet-URL verwenden
-    const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+    // 📡 1. Transaktion senden (echte txid wird erstellt)
+    const submitResponse = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/submit`,
       {},
       {
         headers: {
-          // App Secret Key ist laut offizieller Doku für /complete zwingend erforderlich
-          Authorization: `Key ${PI_API_KEY_TESTNET}`,
-          'Content-Type': 'application/json',
-          
+          Authorization: `Key ${process.env.PI_API_KEY}`,
+          'Content-Type': 'application/json'
         }
       }
     );
 
-    const piData = response.data;
-    console.log(`✅ Payment ${paymentId} approved`, piData);
+    const { txid } = submitResponse.data;
 
-    // 🔄 Supabase: Als approved eintragen
-    const { error } = await supabase
-      .from('transactions')
-      .update({
-        status: 'approved',
-        approved_at: new Date().toISOString()
-      })
+    // 💾 2. txid in Supabase speichern (alte wird überschrieben)
+    const { error: dbError } = await supabase
+      .from('payments')
+      .update({ txid })
       .eq('payment_id', paymentId);
 
-    if (error) throw error;
-
-    res.json({ 
-      success: true,
-      status: 'approved',
-      paymentId
-    });
-
-  } catch (error) {
-    console.error("❌ APPROVE ERROR:", {
-      message: error.message,
-      url: error.config?.url,
-      status: error.response?.status,
-      data: error.response?.data
-    });
-    
-    // Spezieller Fall: Bereits genehmigt
-    if (error.response?.data?.error === 'already_approved') {
-      return res.json({ 
-        warning: "already_approved",
-        message: "Zahlung wurde bereits genehmigt" 
-      });
+    if (dbError) {
+      return res.status(500).json({ error: 'txid speichern fehlgeschlagen', detail: dbError });
     }
-    
-    res.status(error.response?.status || 500).json({
-      error: error.response?.data?.error_message || error.message
+
+    res.json({
+      success: true,
+      paymentId,
+      txid,
+      message: "✅ Echte Transaktion gesendet & gespeichert"
+    });
+
+  } catch (err) {
+    console.error("❌ Fehler bei submit-payment:", err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data?.error || err.message,
+      details: err.response?.data
     });
   }
 });
+
 
 
 
