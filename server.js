@@ -7,7 +7,7 @@ import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
 const API_KEY = process.env.PI_API_KEY_TESTNET;
-const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
+//const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -152,7 +152,7 @@ app.post('/submit-payment', async (req, res) => {
 
     // 🚀 3. Sende die Transaktion (submit)
     const submitResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/`,
+      `https://api.minepi.com/v2/payments/submit`,
       paymentData,
       {
         headers: {
