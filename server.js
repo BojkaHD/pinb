@@ -115,14 +115,9 @@ app.post('/createPayment', async (req, res) => {
   }
 });
 
-// ganz oben
-import PiNetwork from 'pi-backend'; // ✅ korrekter Import
+import piBackend from 'pi-backend';
 
-// SDK Initialisierung
-const pi = new PiNetwork(
-  process.env.PI_API_KEY,
-  process.env.APP_WALLET_PRIVATE_SEED
-);
+const pi = piBackend(API_KEY, PRIVATE_SEED);
 
 app.post('/submit-payment', async (req, res) => {
   const { paymentId } = req.body;
