@@ -191,41 +191,79 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   }
 
   try {
-    // 1️⃣ Abschluss bei Pi Network (verwende SECRET KEY für Testnet!)
-    const piResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${payment_id}/complete`,
+    // 0️⃣ Payment genehmigen (MUSS vor complete kommen)
+    const approveResponse = await axios.post(
+      `https://api.minepi.com/v2/payments/${id}/approve`,
+      {},
+      {
+        headers: {
+          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log(`✅ Payment ${id} approved:`, approveResponse.data);
+
+    // 1️⃣ Payment abschließen
+    const completeResponse = await axios.post(
+      `https://api.minepi.com/v2/payments/${id}/complete`,
       { txid },
       {
         headers: {
-      Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`, // 👈 Korrigierte Variable
-      'Content-Type': 'application/json'
-    }
-  }
-);
+          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
 
-    const paymentDTO = piResponse.data;
+    const paymentDTO = completeResponse.data;
     const from_address = paymentDTO.from_address || null;
     const verified = paymentDTO.transaction?.verified ?? false;
 
-    // 2️⃣ Prüfen, ob es sich um App-to-User (payments) oder Donate (transactions) handelt
-    const { data: inPayments } = await supabase
+    // 2️⃣ Unterscheidung zwischen Spenden (transactions) und App-to-User (payments)
+    const { data: paymentRecord } = await supabase
       .from('payments')
       .select('id')
       .eq('payment_id', id)
       .maybeSingle();
 
-    const table = inPayments ? 'payments' : 'transactions';
+    const { data: donationRecord } = await supabase
+      .from('transactions')
+      .select('id')
+      .eq('payment_id', id)
+      .maybeSingle();
 
-    // 3️⃣ Supabase aktualisieren
+    let table = null;
+    if (paymentRecord) table = 'payments';
+    if (donationRecord) table = 'transactions';
+    
+    if (!table) {
+      return res.status(404).json({ error: 'Zahlung in keiner Tabelle gefunden' });
+    }
+
+    // 3️⃣ Supabase aktualisieren mit typspezifischen Feldern
+    const updateData = {
+      txid,
+      status: verified ? 'completed' : 'unverified',
+      updated_at: new Date().toISOString()
+    };
+
+    // Zusätzliche Felder für Spenden
+    if (table === 'transactions') {
+      updateData.wallet_address = from_address;
+      updateData.verified = verified;
+    }
+
+    // Zusätzliche Felder für App-to-User
+    if (table === 'payments') {
+      updateData.completed_at = new Date().toISOString();
+    }
+
     const { error: updateError } = await supabase
       .from(table)
-      .update({
-        txid,
-        status: verified ? 'completed' : 'unverified',
-        ...(table === 'transactions' && { wallet_address: from_address }) // Nur für Spenden relevant
-      })
-      .eq('payment_id', id)
-      .select();
+      .update(updateData)
+      .eq('payment_id', id);
 
     if (updateError) {
       console.error(`❌ Supabase Update-Fehler [${table}]:`, updateError);
@@ -238,15 +276,35 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       txid,
       status: verified ? 'completed' : 'unverified',
       table,
+      verified,
+      from_address,
       pi: paymentDTO
     });
 
   } catch (err) {
-    console.error("❌ Fehler beim Pi /complete:", err.response?.data || err.message);
-    res.status(err.response?.status || 500).json({ error: err.response?.data || err.message });
+    // Detaillierte Fehleranalyse
+    const errorInfo = {
+      message: err.message,
+      url: err.config?.url,
+      status: err.response?.status,
+      data: err.response?.data,
+      stack: err.stack
+    };
+    
+    console.error("❌ Kritischer Fehler in /complete-payment:", errorInfo);
+    
+    // Spezieller Fall: Payment wurde bereits genehmigt
+    if (err.response?.data?.error === 'already_approved') {
+      console.warn("⚠️ Payment bereits genehmigt, fahre fort...");
+      // Hier könntest du direkt mit /complete fortfahren
+    }
+    
+    res.status(err.response?.status || 500).json({ 
+      error: err.response?.data?.error_message || err.message,
+      details: err.response?.data
+    });
   }
 });
-
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
