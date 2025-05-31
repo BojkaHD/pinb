@@ -181,44 +181,72 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
+// complete-payment Route
+app.post('/complete-payment', validateApiKey, async (req, res) => {
+  const { payment_id, txid } = req.body;
 
+  if (!payment_id || !txid) {
+    return res.status(400).json({ error: 'payment_id oder txid fehlt' });
+  }
 
-async function completePaymentAndUpdateDB(payment_id, txid) {
   try {
-    // 1. Pi Network: /complete-payment aufrufen
-    const url = `https://api.minepi.com/v2/payments/${payment_id}/complete`;
-    const headers = {
-      headers: {
-        Authorization: `key ${process.env.PI_API_KEY}`
+    // 1️⃣ Zahlung bei Pi Server abschließen
+    const piResponse = await axios.post(
+      `https://api.minepi.com/v2/payments/${payment_id}/complete`,
+      { txid },
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
       }
-    };
-    const body = { txid };
+    );
 
-    const response = await axios.post(url, body, headers);
-    const paymentDTO = response.data;
+    const paymentDTO = piResponse.data;
 
-    // 2. Supabase: Zahlungseintrag mit txid und neuem Status aktualisieren
-    const { data, error } = await supabase
-      .from("payments")
-      .update({
-        txid: txid,
-        status: "completed"
-      })
-      .eq("payment_id", payment_id);
+    // 2️⃣ Herausfinden, zu welcher Tabelle die Zahlung gehört
+    let isAppToUser = false;
 
-    if (error) {
-      console.error("Fehler beim Aktualisieren in Supabase:", error);
-      throw error;
+    const { data: payData } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('payment_id', payment_id)
+      .maybeSingle();
+
+    if (payData) {
+      isAppToUser = true;
     }
 
-    console.log("Zahlung erfolgreich abgeschlossen und DB aktualisiert:", data);
-    return { paymentDTO, dbUpdate: data };
+    // 3️⃣ Daten aktualisieren in der richtigen Tabelle
+    const updateTable = isAppToUser ? 'payments' : 'transactions';
 
-  } catch (err) {
-    console.error("Fehler bei complete-payment oder Supabase:", err.response?.data || err.message);
-    throw err;
+    const { error: updateError } = await supabase
+      .from(updateTable)
+      .update({
+        txid: txid,
+        status: 'completed'
+      })
+      .eq('payment_id', payment_id);
+
+    if (updateError) {
+      console.error('❌ Supabase Fehler:', updateError);
+      return res.status(500).json({ error: 'Supabase-Update fehlgeschlagen' });
+    }
+
+    res.json({
+      success: true,
+      status: 'completed',
+      txid,
+      payment_type: isAppToUser ? 'app_to_user' : 'user_to_app',
+      pi: paymentDTO
+    });
+
+  } catch (error) {
+    const errMsg = error.response?.data || error.message;
+    console.error('❌ Fehler beim Complete Payment:', errMsg);
+    res.status(error.response?.status || 500).json({ error: errMsg });
   }
-}
+});
 
 
 
