@@ -133,15 +133,24 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       return res.status(400).json({ error: "paymentId fehlt" });
     }
 
+    if (!SECRET_KEY || !API_KEY) {
+    return res.status(500).json({ error: "Fehlende API oder Secret Keys in .env" });
+    }  
+    
+    const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
+    const API_KEY = process.env.PI_API_KEY_TESTNET;
+
     // ✅ WICHTIG: Testnet-URL verwenden
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
       {
         headers: {
-          // ✅ SERVER KEY verwenden
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
+          // App Secret Key ist laut offizieller Doku für /complete zwingend erforderlich
+          Authorization: `Key ${SECRET_KEY}`,
+          'Content-Type': 'application/json',
+          // Optional, falls Pi Network beide Keys prüft (zukunftssicher)
+          'x-api-key': API_KEY
         }
       }
     );
@@ -196,7 +205,6 @@ app.post('/complete-payment', async (req, res) => {
     return res.status(400).json({ error: "paymentId oder txid fehlt" });
   }
 
-  //const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
   const API_KEY = process.env.PI_API_KEY_TESTNET;
 
   if (!API_KEY) {
