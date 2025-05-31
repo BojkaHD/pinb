@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
+import { PiNetwork } from 'pi-backend';
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -46,8 +47,6 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
-import crypto from 'crypto';
-
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
 app.post('/createPayment', async (req, res) => {
   const { uid, amount, memo } = req.body;
@@ -87,7 +86,6 @@ app.post('/createPayment', async (req, res) => {
     );
 
     const piPayment = piResponse.data;
-
 
     // 💾 Speichern in Supabase (Table: payments)
     const { error: dbError } = await supabase.from('payments').insert([
@@ -186,9 +184,6 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 });
 
 // Submit-payment Route
-
-import PiNetwork from 'pi-backend';
-
 // Stelle sicher, dass diese Umgebungsvariablen gesetzt sind
 const API_KEY = process.env.PI_API_KEY_TESTNET;
 const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
