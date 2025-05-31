@@ -88,8 +88,21 @@ app.post('/createPayment', async (req, res) => {
 
     const piPayment = piResponse.data;
 
-    // 🧾 txid generieren (hex, ohne prefix)
-    const txid = crypto.randomBytes(32).toString('hex');
+    // 🧾 txid basierend auf payment_id + timestamp, signiert mit SECRET_KEY
+    const secret = process.env.APP_SECRET_KEY_TESTNET;
+
+    if (!secret) {
+      return res.status(500).json({ error: "APP_SECRET_KEY_TESTNET fehlt in .env" });
+    }
+
+    const rawMessage = `${piPayment.identifier}-${Date.now()}`;
+
+    // Signatur mit HMAC-SHA256
+    const txid = crypto
+      .createHmac('sha256', secret)
+      .update(rawMessage)
+      .digest('hex');
+
 
     // 💾 Speichern in Supabase (Table: payments)
     const { error: dbError } = await supabase.from('payments').insert([
@@ -133,13 +146,6 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       return res.status(400).json({ error: "paymentId fehlt" });
     }
 
-    if (!SECRET_KEY || !API_KEY) {
-    return res.status(500).json({ error: "Fehlende API oder Secret Keys in .env" });
-    }  
-    
-    const API_KEY = process.env.PI_API_KEY_TESTNET;
-    const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
-    
     // ✅ WICHTIG: Testnet-URL verwenden
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
@@ -147,10 +153,8 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       {
         headers: {
           // App Secret Key ist laut offizieller Doku für /complete zwingend erforderlich
-          Authorization: `Key ${SECRET_KEY}`,
+          Authorization: `Key ${PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json',
-          // Optional, falls Pi Network beide Keys prüft (zukunftssicher)
-          'x-api-key': API_KEY
         }
       }
     );
