@@ -142,7 +142,6 @@ app.post('/submit-payment', async (req, res) => {
 
     const paymentData = {
       payment: {
-        identifier: paymentRow.payment_Id,
         user_uid: paymentRow.uid,
         amount: 1,
         memo: paymentRow.memo,
@@ -152,7 +151,7 @@ app.post('/submit-payment', async (req, res) => {
 
     // 🚀 3. Sende die Transaktion (submit)
     const submitResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/submit`,
+      `https://api.minepi.com/v2/payments/${paymentId}/submit`,
       paymentData,
       {
         headers: {
