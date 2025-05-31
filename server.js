@@ -156,7 +156,7 @@ app.post('/submit-payment', async (req, res) => {
 
     const { txid } = submitResponse.data;
 
-    // 💾 4. Speichere txid in Supabase
+    // 💾 2. txid in Supabase speichern (alte wird überschrieben)
     const { error: dbError } = await supabase
       .from('payments')
       .update({ txid })
@@ -170,7 +170,7 @@ app.post('/submit-payment', async (req, res) => {
       success: true,
       paymentId,
       txid,
-      message: "Transaktion erfolgreich übermittelt ✅"
+      message: "✅ Echte Transaktion gesendet & gespeichert"
     });
 
   } catch (err) {
