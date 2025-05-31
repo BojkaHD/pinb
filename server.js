@@ -116,17 +116,6 @@ app.post('/createPayment', async (req, res) => {
 });
 
 
-import * as piBackend from 'pi-backend';
-
-// ✅ RICHTIG
-const API_KEY = process.env.PI_API_KEY;
-const PRIVATE_SEED = process.env.APP_WALLET_PRIVATE_SEED;
-
-
-const pi = new piBackend.default(API_KEY, PRIVATE_SEED);
-
-
-
 app.post('/submit-payment', async (req, res) => {
   const { paymentId } = req.body;
 
@@ -134,11 +123,40 @@ app.post('/submit-payment', async (req, res) => {
     return res.status(400).json({ error: "paymentId fehlt" });
   }
 
-  try {
-    // 🚀 sendet Transaktion + ruft automatisch /approve intern auf
-    const txid = await pi.submitPayment(paymentId);
+  const API_KEY = process.env.PI_API_KEY;
+  const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
 
-    // 💾 txid speichern
+  if (!API_KEY || !PRIVATE_SEED) {
+    return res.status(500).json({ error: "API_KEY oder PRIVATE_SEED fehlt in .env" });
+  }
+
+  try {
+    // 📦 Hole die gespeicherten Zahlungsdaten aus Supabase
+    const { data: paymentRow, error: fetchError } = await supabase
+      .from('payments')
+      .select('amount, metadata, uid, to_address, memo') // je nach Struktur deiner Tabelle
+      .eq('payment_id', paymentId)
+      .single();
+
+    if (fetchError || !paymentRow) {
+      return res.status(404).json({ error: 'Zahlung nicht gefunden' });
+    }
+
+    // 🚀 3. Sende die Transaktion (submit)
+    const submitResponse = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/submit`,
+      {},
+      {
+        headers: {
+          Authorization: `Key ${PRIVATE_SEED}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const { txid } = submitResponse.data;
+
+    // 💾 4. Speichere txid in Supabase
     const { error: dbError } = await supabase
       .from('payments')
       .update({ txid })
@@ -152,12 +170,15 @@ app.post('/submit-payment', async (req, res) => {
       success: true,
       paymentId,
       txid,
-      message: "Transaktion erfolgreich gesendet ✅"
+      message: "Transaktion erfolgreich übermittelt ✅"
     });
 
   } catch (err) {
-    console.error("❌ Fehler bei submit-payment:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("❌ Fehler bei submit-payment:", err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data?.error || err.message,
+      details: err.response?.data
+    });
   }
 });
 
