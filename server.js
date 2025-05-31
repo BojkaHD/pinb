@@ -46,41 +46,41 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
+import crypto from 'crypto';
+
 // 🧾 App-to-User Zahlung erstellen (z. B. via CLI oder Backend Trigger)
 app.post('/createPayment', async (req, res) => {
   const { uid, amount, memo } = req.body;
 
-  // Benutzer aus Supabase "users" lesen
+  // 🔎 Nutzer validieren
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('uid')
     .eq('uid', uid)
     .single();
 
-  console.log("UserID:"+user.uid);
-
   if (userError || !user) {
     return res.status(400).json({ error: 'User nicht gefunden.' });
   }
 
   try {
+    // 📦 Zahlung vorbereiten
     const paymentData = {
       payment: {
         amount,
         memo,
-        metadata: {test: "Testpayment-A2U"},
+        metadata: { purpose: "App2User", uid },
         uid
       }
     };
 
-    console.log("Stoppunkt nach PaymentData");
-
+    // 🚀 Zahlung bei Pi anlegen
     const piResponse = await axios.post(
       'https://api.minepi.com/v2/payments',
       paymentData,
       {
         headers: {
-          Authorization: `Key ${PI_API_KEY_TESTNET}`, // oder dein Mainnet-Key
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
@@ -88,35 +88,38 @@ app.post('/createPayment', async (req, res) => {
 
     const piPayment = piResponse.data;
 
-    console.log("Stoppunkt nach PiPayment-ResponseData");
+    // 🧾 txid generieren (hex, ohne prefix)
+    const txid = crypto.randomBytes(32).toString('hex');
 
-    const { error: txError } = await supabase.from('payments').insert([
-    {
-    payment_id: piPayment.identifier,
-    uid: user.uid,
-    sender: 'App', // oder leer lassen, wenn nicht relevant
-    amount: parseFloat(amount), // wichtig: numerisch speichern
-    status: 'pending',
-    metadata: { memo }, // optional: weitere Daten hier rein
-    }
+    // 💾 Speichern in Supabase (Table: payments)
+    const { error: dbError } = await supabase.from('payments').insert([
+      {
+        payment_id: piPayment.identifier,
+        uid: user.uid,
+        sender: 'App',
+        amount: parseFloat(amount),
+        status: 'pending',
+        txid,
+        metadata: { memo }
+      }
     ]);
 
-    if (txError) {
-      console.error('Supabase Fehler:', txError);
-      return res.status(500).json({ error: 'Transaktionsspeicherung fehlgeschlagen' });
+    if (dbError) {
+      console.error('❌ Supabase Insert Fehler:', dbError);
+      return res.status(500).json({ error: 'Fehler beim Speichern in Supabase' });
     }
 
     res.json({
       success: true,
       payment_id: piPayment.identifier,
+      txid,
       payment: piPayment
     });
 
   } catch (err) {
-    console.error('Zahlungsfehler:', err.response?.data || err.message);
+    console.error('❌ Fehler bei createPayment:', err.response?.data || err.message);
     res.status(500).json({
-      error: 'Zahlung konnte nicht initiiert werden',
-      details: err.response?.data || err.message
+      error: err.response?.data?.error || err.message
     });
   }
 });
@@ -186,22 +189,19 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 });
 
 // complete-payment Route
-app.post('/complete-payment', validateApiKey, async (req, res) => {
-  const { payment_id, txid, paymentId } = req.body;
-  const id = payment_id || paymentId;
+app.post('/complete-payment', async (req, res) => {
+  const { paymentId, txid } = req.body;
 
-  if (!id || !txid) {
-    return res.status(400).json({ error: 'payment_id oder txid fehlt' });
+  if (!paymentId || !txid) {
+    return res.status(400).json({ error: "paymentId oder txid fehlt" });
   }
 
   try {
-    // ✅ WICHTIG: Testnet-URL verwenden
     const piResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${id}/complete`,
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
       {
         headers: {
-          // ✅ SERVER KEY verwenden
           Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
@@ -211,58 +211,34 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     const paymentDTO = piResponse.data;
     const verified = paymentDTO.transaction?.verified ?? false;
 
-    // 🔄 Supabase aktualisieren (für beide Tabellen)
-    const updateOperations = [
-      supabase.from('payments')
-        .update({
-          txid,
-          status: verified ? 'completed' : 'unverified',
-          completed_at: new Date().toISOString()
-        })
-        .eq('payment_id', id),
-        
-      supabase.from('transactions')
-        .update({
-          txid,
-          status: verified ? 'completed' : 'unverified',
-          verified,
-          wallet_address: paymentDTO.from_address || null
-        })
-        .eq('payment_id', id)
-    ];
+    // Supabase Update
+    const { error: updateError } = await supabase
+      .from('payments')
+      .update({
+        status: verified ? 'completed' : 'unverified',
+        verified,
+        completed_at: new Date().toISOString()
+      })
+      .eq('payment_id', paymentId);
 
-    // Führe beide Updates aus (eines wird 0 Zeilen betreffen)
-    const results = await Promise.all(updateOperations);
-    const success = results.some(result => !result.error && result.count > 0);
-
-    if (!success) {
-      console.error("❌ Supabase: Zahlung in keiner Tabelle gefunden");
-      return res.status(404).json({ error: 'Zahlung nicht gefunden' });
+    if (updateError) {
+      return res.status(500).json({ error: 'Supabase update fehlgeschlagen' });
     }
 
     res.json({
       success: true,
-      payment_id: id,
+      payment_id: paymentId,
       txid,
-      status: verified ? 'completed' : 'unverified',
-      verified
+      status: verified ? 'completed' : 'unverified'
     });
 
   } catch (err) {
-    console.error("❌ COMPLETE ERROR:", {
-      message: err.message,
-      url: err.config?.url,
-      status: err.response?.status,
-      data: err.response?.data
-    });
-    
+    console.error("❌ Fehler bei complete-payment:", err.response?.data || err.message);
     res.status(err.response?.status || 500).json({
-      error: err.response?.data?.error_message || err.message,
-      details: err.response?.data
+      error: err.response?.data?.error || err.message
     });
   }
 });
-
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
