@@ -132,7 +132,7 @@ app.post('/submit-payment', async (req, res) => {
     // 📦 Hole die gespeicherten Zahlungsdaten aus Supabase
     const { data: paymentRow, error: fetchError } = await supabase
       .from('payments')
-      .select('amount, metadata, payment_id, uid, memo') // je nach Struktur deiner Tabelle
+      .select('sender, amount, status, metadata, created_at, uid, txid, payment_id, uid, memo')
       .eq('payment_id', paymentId)
       .single();
 
