@@ -123,7 +123,7 @@ app.post('/submit-payment', async (req, res) => {
     return res.status(400).json({ error: "paymentId fehlt" });
   }
 
-  const API_KEY = process.env.PI_API_KEY;
+  const API_KEY = process.env.PI_API_KEY_TESTNET;
   const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
 
   if (!API_KEY || !PRIVATE_SEED) {
