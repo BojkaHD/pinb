@@ -189,7 +189,7 @@ app.post('/submitPayment', async (req, res) => {
 
   try {
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/submit`,
+      `https://api.minepi.com/v2/payments/${paymentId}`,
       {}, // Body leer
       {
         headers: {
