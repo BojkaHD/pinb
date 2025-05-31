@@ -202,7 +202,8 @@ app.post('/complete-payment', async (req, res) => {
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          // 🔐 Verwendet den SECRET KEY für die Signatur-Authentifizierung
+          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
@@ -211,10 +212,11 @@ app.post('/complete-payment', async (req, res) => {
     const paymentDTO = piResponse.data;
     const verified = paymentDTO.transaction?.verified ?? false;
 
-    // Supabase Update
+    // 🧾 Supabase Update (nur payments, da App-to-User)
     const { error: updateError } = await supabase
       .from('payments')
       .update({
+        txid,
         status: verified ? 'completed' : 'unverified',
         verified,
         completed_at: new Date().toISOString()
@@ -235,7 +237,8 @@ app.post('/complete-payment', async (req, res) => {
   } catch (err) {
     console.error("❌ Fehler bei complete-payment:", err.response?.data || err.message);
     res.status(err.response?.status || 500).json({
-      error: err.response?.data?.error || err.message
+      error: err.response?.data?.error || err.message,
+      details: err.response?.data
     });
   }
 });
