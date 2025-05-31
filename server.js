@@ -199,8 +199,8 @@ app.post('/complete-payment', async (req, res) => {
   //const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
   const API_KEY = process.env.PI_API_KEY_TESTNET;
 
-  if (!SECRET_KEY || !API_KEY) {
-    return res.status(500).json({ error: "Fehlende API oder Secret Keys in .env" });
+  if (!API_KEY) {
+    return res.status(500).json({ error: "Fehlende API Key in .env" });
   }
 
   try {
