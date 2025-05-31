@@ -132,7 +132,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 
     // ✅ Zahlung bei Pi genehmigen
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+      `https://api.minepi.com/v2/payments/${payment_Id}/approve`,
       {},
       {
         headers: {
@@ -193,15 +193,15 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   try {
     // 1️⃣ Abschluss bei Pi Network (verwende SECRET KEY für Testnet!)
     const piResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${id}/complete`,
+      `https://api.minepi.com/v2/payments/${payment_id}/complete`,
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+      Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`, // 👈 Korrigierte Variable
+      'Content-Type': 'application/json'
+    }
+  }
+);
 
     const paymentDTO = piResponse.data;
     const from_address = paymentDTO.from_address || null;
