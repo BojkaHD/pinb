@@ -5,7 +5,6 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
-import { Pi } from '@pinetwork-js/sdk';
 
 const PI_API_KEY_TESTNET = process.env.PI_API_KEY_TESTNET;
 
