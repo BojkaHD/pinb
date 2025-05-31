@@ -115,6 +115,50 @@ app.post('/createPayment', async (req, res) => {
   }
 });
 
+// ganz oben
+import PiNetwork from 'pi-backend'; // ✅ korrekter Import
+
+// SDK Initialisierung
+const pi = new PiNetwork(
+  process.env.PI_API_KEY,
+  process.env.APP_WALLET_PRIVATE_SEED
+);
+
+app.post('/submit-payment', async (req, res) => {
+  const { paymentId } = req.body;
+
+  if (!paymentId) {
+    return res.status(400).json({ error: "paymentId fehlt" });
+  }
+
+  try {
+    // 🚀 sendet Transaktion + ruft automatisch /approve intern auf
+    const txid = await pi.submitPayment(paymentId);
+
+    // 💾 txid speichern
+    const { error: dbError } = await supabase
+      .from('payments')
+      .update({ txid })
+      .eq('payment_id', paymentId);
+
+    if (dbError) {
+      return res.status(500).json({ error: 'txid speichern fehlgeschlagen', detail: dbError });
+    }
+
+    res.json({
+      success: true,
+      paymentId,
+      txid,
+      message: "Transaktion erfolgreich gesendet ✅"
+    });
+
+  } catch (err) {
+    console.error("❌ Fehler bei submit-payment:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // approve-payment Route
 app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
@@ -123,6 +167,8 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     if (!paymentId) {
       return res.status(400).json({ error: "paymentId fehlt" });
     }
+
+
     
     // ✅ WICHTIG: Testnet-URL verwenden
     const response = await axios.post(
@@ -180,46 +226,6 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-import * as piBackend from 'pi-backend';
-
-const pi = new piBackend(
-  process.env.PI_API_KEY,
-  process.env.APP_WALLET_PRIVATE_SEED
-);
-
-app.post('/submit-payment', async (req, res) => {
-  const { paymentId } = req.body;
-
-  if (!paymentId) {
-    return res.status(400).json({ error: "paymentId fehlt" });
-  }
-
-  try {
-    // 🧾 Sende echte Blockchain-Zahlung
-    const txid = await pi.submitPayment(paymentId);
-
-    // 💾 txid speichern
-    const { error: dbError } = await supabase
-      .from('payments')
-      .update({ txid })
-      .eq('payment_id', paymentId);
-
-    if (dbError) {
-      return res.status(500).json({ error: 'txid speichern fehlgeschlagen', detail: dbError });
-    }
-
-    res.json({
-      success: true,
-      paymentId,
-      txid,
-      message: "Transaktion erfolgreich gesendet ✅"
-    });
-
-  } catch (err) {
-    console.error("❌ Fehler bei submit-payment:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 
 // complete-payment Route
