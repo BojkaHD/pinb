@@ -182,7 +182,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 
 import piBackend from 'pi-backend';
 
-const pi = piBackend(
+const pi = new piBackend(
   process.env.PI_API_KEY,
   process.env.APP_WALLET_PRIVATE_SEED
 );
