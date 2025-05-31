@@ -181,195 +181,45 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-import jwt from 'jsonwebtoken';
-import axios from 'axios';
 
-// ENTFERNE DIESE ZEILE: import jwt from 'jsonwebtoken';
-// (jwt ist bereits in server.js importiert)
 
-app.post('/complete-payment', validateApiKey, async (req, res) => {
-  const { paymentId } = req.body;
-
-  if (!paymentId) {
-    return res.status(400).json({ error: 'paymentId erforderlich' });
-  }
-
+async function completePaymentAndUpdateDB(payment_id, txid) {
   try {
-    // 1. Signierte TXID generieren
-    const txid = jwt.sign(
-      { payment_id: paymentId },
-      process.env.APP_SECRET_KEY_TESTNET,
-      { algorithm: 'HS256', expiresIn: '5m' }
-    );
-    console.log("🧾 Generierte txid:", txid);
-
-    // 2. Zahlung bei Pi abschließen
-    const piResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      { txid },
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
+    // 1. Pi Network: /complete-payment aufrufen
+    const url = `https://api.minepi.com/v2/payments/${payment_id}/complete`;
+    const headers = {
+      headers: {
+        Authorization: `key ${process.env.PI_API_KEY}`
       }
-    );
-
-    const payment = piResponse.data;
-    
-    // 3. UID validieren (36 Zeichen UUID)
-    const uid = payment.user_uid;
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uid || !uuidPattern.test(uid)) {
-      throw new Error(`Invalid UID format: ${uid}`);
-    }
-
-    // 4. Daten extrahieren
-    const username = payment.metadata?.username || null;
-    const senderWallet = payment.from_address;
-    const amount = payment.amount.toString();
-    const memo = payment.memo || '';
-    
-    const {
-      developer_approved = false,
-      transaction_verified = false,
-      developer_completed = false
-    } = payment.status;
-
-    // 5. Dynamischen Status bestimmen
-    const paymentStatus = transaction_verified 
-      ? 'verified' 
-      : developer_completed 
-        ? 'completed' 
-        : 'pending';
-
-    // 6. Existierende Zahlung prüfen
-    const { data: existing, error: fetchError } = await supabase
-      .from('payments')
-      .select('payment_id, status, transaction_verified')
-      .eq('payment_id', paymentId)
-      .maybeSingle();
-
-    if (fetchError) throw fetchError;
-
-    // 7. Verhindere Überschreiben verifizierter Transaktionen
-    if (existing?.transaction_verified) {
-      return res.json({ 
-        status: existing.status,
-        message: 'Zahlung bereits verifiziert' 
-      });
-    }
-
-    // 8. Datenobjekt für DB-Operation
-    const paymentData = {
-      payment_id: paymentId,
-      status: paymentStatus,
-      txid,
-      sender: senderWallet,
-      amount,
-      memo,
-      uid,
-      username,
-      metadata: payment.metadata || null,
-      developer_approved,
-      transaction_verified,
-      developer_completed,
-      last_updated: new Date().toISOString()
     };
+    const body = { txid };
 
-    // 9. Update oder Insert
-    const { error: dbError } = existing 
-      ? await supabase.from('payments').update(paymentData).eq('payment_id', paymentId)
-      : await supabase.from('payments').insert([paymentData]);
+    const response = await axios.post(url, body, headers);
+    const paymentDTO = response.data;
 
-    if (dbError) throw dbError;
+    // 2. Supabase: Zahlungseintrag mit txid und neuem Status aktualisieren
+    const { data, error } = await supabase
+      .from("payments")
+      .update({
+        txid: txid,
+        status: "completed"
+      })
+      .eq("payment_id", payment_id);
 
-    console.log(`✅ Zahlung [${paymentStatus}] gespeichert:`, paymentId);
-
-    // 10. Hintergrundprüfung für pending-Status starten
-    if (paymentStatus === 'pending') {
-      schedulePaymentCheck(paymentId);
+    if (error) {
+      console.error("Fehler beim Aktualisieren in Supabase:", error);
+      throw error;
     }
 
-    res.json({ status: paymentStatus });
+    console.log("Zahlung erfolgreich abgeschlossen und DB aktualisiert:", data);
+    return { paymentDTO, dbUpdate: data };
 
-  } catch (error) {
-    const errorDetails = error.response?.data || error.message;
-    const statusCode = error.response?.status || 500;
-    
-    console.error(`❌ /complete-payment Fehler [${statusCode}]:`, {
-      paymentId,
-      error: errorDetails,
-      stack: error.stack
-    });
-
-    res.status(statusCode).json({
-      error: errorDetails?.error || errorDetails
-    });
-  }
-});
-
-// ===== HILFSFUNKTIONEN ===== //
-
-async function schedulePaymentCheck(paymentId) {
-  try {
-    // 5 Versuche alle 30 Sekunden
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 30000));
-      
-      const updated = await checkPaymentStatus(paymentId);
-      if (updated) return;
-    }
-    
-    console.warn(`⚠️ Statusprüfung abgebrochen nach 5 Versuchen: ${paymentId}`);
-    await supabase
-      .from('payments')
-      .update({ status: 'failed' })
-      .eq('payment_id', paymentId);
-      
-  } catch (error) {
-    console.error('❌ Fehler in schedulePaymentCheck:', error);
+  } catch (err) {
+    console.error("Fehler bei complete-payment oder Supabase:", err.response?.data || err.message);
+    throw err;
   }
 }
 
-async function checkPaymentStatus(paymentId) {
-  try {
-    const piResponse = await axios.get(
-      `https://api.minepi.com/v2/payments/${paymentId}`,
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`
-        },
-        timeout: 5000
-      }
-    );
-    
-    const payment = piResponse.data;
-    const verified = payment.status?.transaction_verified || false;
-    
-    if (verified) {
-      await supabase
-        .from('payments')
-        .update({
-          status: 'verified',
-          transaction_verified: true,
-          last_updated: new Date().toISOString()
-        })
-        .eq('payment_id', paymentId);
-      
-      console.log(`✅ Zahlung verifiziert: ${paymentId}`);
-      return true;
-    }
-    
-    console.log(`⏳ Noch nicht verifiziert (Versuch ${attempt}): ${paymentId}`);
-    return false;
-    
-  } catch (error) {
-    console.error('❌ Fehler in checkPaymentStatus:', error);
-    return false;
-  }
-}
 
 
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
