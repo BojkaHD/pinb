@@ -6,7 +6,8 @@ import bodyParser from 'body-parser';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
-const PI_API_KEY_TESTNET = process.env.PI_API_KEY_TESTNET;
+const API_KEY = process.env.PI_API_KEY_TESTNET;
+const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -123,9 +124,6 @@ app.post('/submit-payment', async (req, res) => {
     return res.status(400).json({ error: "paymentId fehlt" });
   }
 
-  const API_KEY = process.env.PI_API_KEY_TESTNET;
-  const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
-
   if (!API_KEY || !PRIVATE_SEED) {
     return res.status(500).json({ error: "API_KEY oder PRIVATE_SEED fehlt in .env" });
   }
@@ -148,7 +146,7 @@ app.post('/submit-payment', async (req, res) => {
       {},
       {
         headers: {
-          Authorization: `Key ${PRIVATE_SEED}`,
+          Authorization: `Key ${API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
@@ -202,7 +200,7 @@ app.post('/submit-payment', async (req, res) => {
       {},
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY}`,
+          Authorization: `Key ${process.env.PRIVATE_SEED}`,
           'Content-Type': 'application/json'
         }
       }
