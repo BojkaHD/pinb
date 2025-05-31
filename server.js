@@ -5,6 +5,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { memo } from 'react';
 
 const API_KEY = process.env.PI_API_KEY_TESTNET;
 const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
@@ -142,13 +143,17 @@ app.post('/submit-payment', async (req, res) => {
 
     const paymentData = {
       payment: {
-        payment_id: paymentRow.paymentId
+        identifier: paymentRow.payment_Id,
+        user_uid: paymentRow.uid,
+        amount: 1,
+        memo: paymentRow.memo,
+        metadata: paymentRow.metadata || {}
       }
     };
 
     // 🚀 3. Sende die Transaktion (submit)
     const submitResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/submit`,
+      `https://api.minepi.com/v2/payments/`,
       paymentData,
       {
         headers: {
