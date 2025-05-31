@@ -181,13 +181,6 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-const pi = new Pi({
-  apiKey: process.env.PI_API_KEY,
-  privateKey: process.env.APP_WALLET_PRIVATE_SEED,
-});
-
-
-// 🚀 Route zum Senden einer echten Blockchain-Transaktion (manuell)
 app.post('/submit-payment', async (req, res) => {
   const { paymentId } = req.body;
 
@@ -196,30 +189,38 @@ app.post('/submit-payment', async (req, res) => {
   }
 
   try {
-    const txid = await pi.submitPayment(paymentId);
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/submit`,
+      {}, // Body leer
+      {
+        headers: {
+          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`, // oder MAINNET
+          'Content-Type': 'application/json'
+        }
+      }
+    );
 
-    // 💾 Speichere txid in Supabase
-    const { error: updateError } = await supabase
-      .from('payments')
+    const { txid } = response.data;
+
+    // Supabase speichern (optional)
+    await supabase.from('payments')
       .update({ txid })
       .eq('payment_id', paymentId);
-
-    if (updateError) {
-      return res.status(500).json({ error: 'txid konnte nicht gespeichert werden', detail: updateError });
-    }
 
     res.json({
       success: true,
       paymentId,
-      txid,
-      message: "Transaktion erfolgreich auf Blockchain übermittelt ✅"
+      txid
     });
 
-  } catch (err) {
-    console.error("❌ Fehler bei submit-payment:", err.message);
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    console.error("❌ Fehler bei /submit-payment:", error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data || error.message
+    });
   }
 });
+
 
 
 // complete-payment Route
