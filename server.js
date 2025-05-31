@@ -180,7 +180,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-import piBackend from 'pi-backend';
+import * as piBackend from 'pi-backend';
 
 const pi = new piBackend(
   process.env.PI_API_KEY,
