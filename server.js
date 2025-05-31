@@ -88,21 +88,6 @@ app.post('/createPayment', async (req, res) => {
 
     const piPayment = piResponse.data;
 
-    // 🧾 txid basierend auf payment_id + timestamp, signiert mit SECRET_KEY
-    const secret = process.env.APP_SECRET_KEY_TESTNET;
-
-    if (!secret) {
-      return res.status(500).json({ error: "APP_SECRET_KEY_TESTNET fehlt in .env" });
-    }
-
-    const rawMessage = `${piPayment.identifier}-${Date.now()}`;
-
-    // Signatur mit HMAC-SHA256
-    const txid = crypto
-      .createHmac('sha256', secret)
-      .update(rawMessage)
-      .digest('hex');
-
 
     // 💾 Speichern in Supabase (Table: payments)
     const { error: dbError } = await supabase.from('payments').insert([
@@ -112,7 +97,6 @@ app.post('/createPayment', async (req, res) => {
         sender: 'App',
         amount: parseFloat(amount),
         status: 'pending',
-        txid,
         metadata: { memo }
       }
     ]);
@@ -125,7 +109,6 @@ app.post('/createPayment', async (req, res) => {
     res.json({
       success: true,
       payment_id: piPayment.identifier,
-      txid,
       payment: piPayment
     });
 
@@ -145,7 +128,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     if (!paymentId) {
       return res.status(400).json({ error: "paymentId fehlt" });
     }
-
+    
     // ✅ WICHTIG: Testnet-URL verwenden
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
@@ -155,6 +138,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
           // App Secret Key ist laut offizieller Doku für /complete zwingend erforderlich
           Authorization: `Key ${PI_API_KEY_TESTNET}`,
           'Content-Type': 'application/json',
+          
         }
       }
     );
@@ -200,6 +184,53 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     });
   }
 });
+
+// Submit-payment Route
+
+import PiNetwork from 'pi-backend';
+
+// Stelle sicher, dass diese Umgebungsvariablen gesetzt sind
+const API_KEY = process.env.PI_API_KEY_TESTNET;
+const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
+
+// Initialisiere das SDK
+const pi = new PiNetwork(API_KEY, PRIVATE_SEED);
+
+// 🚀 Route zum Senden einer echten Blockchain-Transaktion
+app.post('/submit-payment', async (req, res) => {
+  const { paymentId } = req.body;
+
+  if (!paymentId) {
+    return res.status(400).json({ error: "paymentId fehlt" });
+  }
+
+  try {
+    // 📡 Sende echte Zahlung an die Pi Blockchain (on-chain!)
+    const txid = await pi.submitPayment(paymentId);
+
+    // 💾 Speichere txid in Supabase
+    const { error: updateError } = await supabase
+      .from('payments')
+      .update({ txid })
+      .eq('payment_id', paymentId);
+
+    if (updateError) {
+      return res.status(500).json({ error: 'txid konnte nicht gespeichert werden', detail: updateError });
+    }
+
+    res.json({
+      success: true,
+      paymentId,
+      txid,
+      message: "Transaktion erfolgreich auf Blockchain übermittelt ✅"
+    });
+
+  } catch (err) {
+    console.error("❌ Fehler bei submit-payment:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // complete-payment Route
 app.post('/complete-payment', async (req, res) => {
