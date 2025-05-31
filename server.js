@@ -146,7 +146,7 @@ app.post('/submit-payment', async (req, res) => {
       {},
       {
         headers: {
-          Authorization: `Key ${PRIVATE_SEED}`,
+          Authorization: `Key ${API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
