@@ -140,19 +140,19 @@ app.post('/submit-payment', async (req, res) => {
       return res.status(404).json({ error: 'Zahlung nicht gefunden' });
     }
 
-    const paymentData = {
-      payment: {
-        user_uid: paymentRow.uid,
-        amount: 1,
-        memo: paymentRow.memo,
-        metadata: paymentRow.metadata || {}
-      }
-    };
+    //const paymentData = {
+      //payment: {
+        //user_uid: paymentRow.uid,
+        //amount: 1,
+        //memo: paymentRow.memo,
+        //metadata: paymentRow.metadata || {}
+      //}
+    //};
 
     // 🚀 3. Sende die Transaktion (submit)
     const submitResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/submitPayment`,
-      paymentData,
+      `https://api.minepi.com/v2/payments/${paymentId}/submit`,
+      {},
       {
         headers: {
           Authorization: `Key ${API_KEY}`,
