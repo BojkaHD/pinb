@@ -180,7 +180,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-app.post('/submit-payment', async (req, res) => {
+app.post('/submitPayment', async (req, res) => {
   const { paymentId } = req.body;
 
   if (!paymentId) {
