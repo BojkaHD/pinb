@@ -148,7 +148,7 @@ app.post('/submit-payment', async (req, res) => {
 
     // 🚀 3. Sende die Transaktion (submit)
     const submitResponse = await axios.post(
-      `https://api.minepi.com/v2/payments`,
+      `https://api.minepi.com/v2/payments/submit`,
       paymentData,
       {
         headers: {
