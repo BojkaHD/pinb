@@ -9,6 +9,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@pinetwork-js/api-typing": "^0.7.0",
     "@pinetwork-js/sdk": "^0.7.0",
     "@supabase/supabase-js": "^2.49.8",
     "axios": "^1.9.0",
