@@ -76,7 +76,7 @@ app.post('/createPayment', async (req, res) => {
     console.log("Stoppunkt nach PaymentData");
 
     const piResponse = await axios.post(
-      'https://api.minepi.com/v2/payments',
+      'https://api.testnet.minepi.com/v2/payments',
       paymentData,
       {
         headers: {
