@@ -196,7 +196,7 @@ app.post('/complete-payment', async (req, res) => {
     return res.status(400).json({ error: "paymentId oder txid fehlt" });
   }
 
-  const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
+  //const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
   const API_KEY = process.env.PI_API_KEY_TESTNET;
 
   if (!SECRET_KEY || !API_KEY) {
@@ -210,10 +210,8 @@ app.post('/complete-payment', async (req, res) => {
       {
         headers: {
           // App Secret Key ist laut offizieller Doku für /complete zwingend erforderlich
-          Authorization: `Key ${SECRET_KEY}`,
-          'Content-Type': 'application/json',
-          // Optional, falls Pi Network beide Keys prüft (zukunftssicher)
-          'x-api-key': API_KEY
+          Authorization: `Key ${API_KEY}`,
+          'Content-Type': 'application/json'
         }
       }
     );
