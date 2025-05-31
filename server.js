@@ -156,7 +156,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 
     // 🔄 Supabase: Als approved eintragen oder updaten
     const { error } = await supabase.from('transactions').upsert({
-      pi_payment_id: paymentId,
+      payment_id: paymentId,
       uid,
       username,
       wallet_address,
@@ -164,7 +164,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       memo,
       status: 'approved'
     }, {
-      onConflict: ['pi_payment_id']
+      onConflict: ['payment_id']
     });
 
     if (error) {
