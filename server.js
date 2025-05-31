@@ -183,10 +183,12 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 });
 
 //Initialize Submit Payment Route
-const client = new Client({
-  apiKey: process.env.PI_API_KEY,
-  privateSeed: process.env.APP_WALLET_PRIVATE_SEED,
-});
+const client = new Client(
+  process.env.PI_API_KEY,
+  {
+    privateSeed: process.env.APP_WALLET_PRIVATE_SEED
+  }
+);
 
 // 🚀 Route zum Senden einer echten Blockchain-Transaktion
 app.post('/submit-payment', async (req, res) => {
