@@ -121,7 +121,10 @@ import piBackend from 'pi-backend';
 const API_KEY = process.env.PI_API_KEY;
 const PRIVATE_SEED = process.env.APP_WALLET_PRIVATE_SEED;
 
-const pi = piBackend(API_KEY, PRIVATE_SEED);
+import * as piBackend from 'pi-backend';
+
+const pi = new piBackend.default(API_KEY, PRIVATE_SEED);
+
 
 
 app.post('/submit-payment', async (req, res) => {
