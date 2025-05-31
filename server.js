@@ -5,7 +5,6 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
-import { memo } from 'react';
 
 const API_KEY = process.env.PI_API_KEY_TESTNET;
 const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
