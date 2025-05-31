@@ -137,9 +137,9 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     return res.status(500).json({ error: "Fehlende API oder Secret Keys in .env" });
     }  
     
-    const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
     const API_KEY = process.env.PI_API_KEY_TESTNET;
-
+    const SECRET_KEY = process.env.APP_SECRET_KEY_TESTNET;
+    
     // ✅ WICHTIG: Testnet-URL verwenden
     const response = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
