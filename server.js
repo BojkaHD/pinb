@@ -184,20 +184,20 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 // complete-payment Route
 app.post('/complete-payment', validateApiKey, async (req, res) => {
   const { payment_id, txid, paymentId } = req.body;
+  const id = payment_id || paymentId;
 
-  const id = payment_id || paymentId; // beide Varianten unterstützen
   if (!id || !txid) {
     return res.status(400).json({ error: 'payment_id oder txid fehlt' });
   }
 
   try {
-    // 1️⃣ Bei Pi Network als completed markieren
+    // 1️⃣ Abschluss bei Pi Network (verwende SECRET KEY für Testnet!)
     const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${id}/complete`,
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${process.env.APP_SECRET_KEY_TESTNET}`,
           'Content-Type': 'application/json'
         }
       }
@@ -207,14 +207,14 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
     const from_address = paymentDTO.from_address || null;
     const verified = paymentDTO.transaction?.verified ?? false;
 
-    // 2️⃣ Herausfinden, wo speichern → payments (App2User) oder transactions (Donate)
-    const { data: paymentInPayments } = await supabase
+    // 2️⃣ Prüfen, ob es sich um App-to-User (payments) oder Donate (transactions) handelt
+    const { data: inPayments } = await supabase
       .from('payments')
       .select('id')
       .eq('payment_id', id)
       .maybeSingle();
 
-    const table = paymentInPayments ? 'payments' : 'transactions';
+    const table = inPayments ? 'payments' : 'transactions';
 
     // 3️⃣ Supabase aktualisieren
     const { error: updateError } = await supabase
@@ -222,26 +222,28 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       .update({
         txid,
         status: verified ? 'completed' : 'unverified',
-        wallet_address: from_address // nur bei Spenden sinnvoll
+        ...(table === 'transactions' && { wallet_address: from_address }) // Nur für Spenden relevant
       })
       .eq('payment_id', id)
       .select();
 
     if (updateError) {
-      console.error('❌ Supabase Update Fehler:', updateError);
+      console.error(`❌ Supabase Update-Fehler [${table}]:`, updateError);
       return res.status(500).json({ error: 'Supabase update fehlgeschlagen' });
     }
 
     res.json({
       success: true,
+      payment_id: id,
       txid,
       status: verified ? 'completed' : 'unverified',
-      source_table: table
+      table,
+      pi: paymentDTO
     });
 
   } catch (err) {
-    console.error("❌ Fehler bei Pi Complete:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data || err.message });
+    console.error("❌ Fehler beim Pi /complete:", err.response?.data || err.message);
+    res.status(err.response?.status || 500).json({ error: err.response?.data || err.message });
   }
 });
 
