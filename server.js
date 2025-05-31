@@ -4,9 +4,8 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
-import { PiNetwork } from 'pi-backend';
-
 import { createClient } from '@supabase/supabase-js';
+import { Client } from '@pinetwork-js/nodepi';
 
 const PI_API_KEY_TESTNET = process.env.PI_API_KEY_TESTNET;
 
@@ -183,13 +182,11 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
   }
 });
 
-// Submit-payment Route
-// Stelle sicher, dass diese Umgebungsvariablen gesetzt sind
-const API_KEY = process.env.PI_API_KEY_TESTNET;
-const PRIVATE_SEED = process.env.APP_SECRET_KEY_TESTNET;
-
-// Initialisiere das SDK
-const pi = new PiNetwork(API_KEY, PRIVATE_SEED);
+//Initialize Submit Payment Route
+const client = new Client({
+  apiKey: process.env.PI_API_KEY,
+  privateSeed: process.env.APP_WALLET_PRIVATE_SEED,
+});
 
 // 🚀 Route zum Senden einer echten Blockchain-Transaktion
 app.post('/submit-payment', async (req, res) => {
@@ -201,7 +198,7 @@ app.post('/submit-payment', async (req, res) => {
 
   try {
     // 📡 Sende echte Zahlung an die Pi Blockchain (on-chain!)
-    const txid = await pi.submitPayment(paymentId);
+    const txid = await client.submitPayment(paymentId);
 
     // 💾 Speichere txid in Supabase
     const { error: updateError } = await supabase
