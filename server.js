@@ -76,7 +76,7 @@ app.post('/createPayment', async (req, res) => {
     console.log("Stoppunkt nach PaymentData");
 
     const piResponse = await axios.post(
-      'https://api.testnet.minepi.com/v2/payments',
+      'https://api.minepi.com/v2/payments',
       paymentData,
       {
         headers: {
@@ -132,7 +132,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
 
     // ✅ WICHTIG: Testnet-URL verwenden
     const response = await axios.post(
-      `https://api.testnet.minepi.com/v2/payments/${paymentId}/approve`,
+      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
       {
         headers: {
@@ -197,7 +197,7 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
   try {
     // ✅ WICHTIG: Testnet-URL verwenden
     const piResponse = await axios.post(
-      `https://api.testnet.minepi.com/v2/payments/${id}/complete`,
+      `https://api.minepi.com/v2/payments/${id}/complete`,
       { txid },
       {
         headers: {
