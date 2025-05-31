@@ -146,7 +146,7 @@ app.post('/submit-payment', async (req, res) => {
       {},
       {
         headers: {
-          Authorization: `Key ${API_KEY}`,
+          Authorization: `Key ${PRIVATE_SEED}`,
           'Content-Type': 'application/json'
         }
       }
@@ -201,7 +201,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       {
         headers: {
           // App Secret Key ist laut offizieller Doku für /complete zwingend erforderlich
-          Authorization: `Key ${PRIVATE_SEED}`,
+          Authorization: `Key ${API_KEY}`,
           'Content-Type': 'application/json',
           
         }
