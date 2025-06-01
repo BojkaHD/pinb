@@ -3,11 +3,18 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// 🔗 Supabase Initialisierung
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
 // ✅ Erlaubte Domains (Frontend + Pi-Sandbox)
 const allowedOrigins = [
@@ -38,11 +45,15 @@ const validateApiKey = (req, res, next) => {
 
 // ✅ Zahlung genehmigen (Developer Approval)
 app.post('/approve-payment', validateApiKey, async (req, res) => {
-  try {
-    const { paymentId } = req.body;
-    if (!paymentId) throw new Error("paymentId fehlt");
+  const { paymentId, uid, username, wallet_address } = req.body;
 
-    const response = await axios.post(
+  if (!paymentId || !uid || !username) {
+    return res.status(400).json({ error: "Erforderliche Felder fehlen (paymentId, uid, username)" });
+  }
+
+  try {
+    // Pi: Zahlung genehmigen
+    const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
       {
@@ -53,25 +64,41 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       }
     );
 
-    res.json({ 
+    // 🔁 In Supabase eintragen
+    const { error } = await supabase.from('transactions').insert([{
+      payment_id: paymentId,
+      uid,
+      username,
+      wallet_address,
       status: 'approved',
-      piData: response.data 
-    });
+      created_at: new Date().toISOString()
+    }]);
 
-  } catch (error) {
-    const piError = error.response?.data || error.message;
-    console.error("APPROVE ERROR:", piError);
-    res.status(error.response?.status || 500).json({ error: piError });
+    if (error) {
+      console.error("❌ Fehler beim Eintragen in transactions:", error);
+      return res.status(500).json({ error: "Fehler beim Eintrag in Supabase" });
+    }
+
+    res.json({ success: true, status: 'approved', piData: piResponse.data });
+  } catch (err) {
+    console.error("❌ Fehler bei /approve-payment:", err.response?.data || err.message);
+    res.status(err.response?.status || 500).json({
+      error: err.response?.data?.error || err.message
+    });
   }
 });
 
 // ✅ Zahlung abschließen (mit Blockchain TXID)
+// ✅ Spende abschließen: /complete-payment
 app.post('/complete-payment', validateApiKey, async (req, res) => {
-  try {
-    const { paymentId, txid } = req.body;
-    if (!paymentId || !txid) throw new Error("paymentId/txid fehlt");
+  const { paymentId, txid } = req.body;
 
-    const response = await axios.post(
+  if (!paymentId || !txid) {
+    return res.status(400).json({ error: "paymentId oder txid fehlt" });
+  }
+
+  try {
+    const piResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
       {
@@ -82,17 +109,37 @@ app.post('/complete-payment', validateApiKey, async (req, res) => {
       }
     );
 
-    res.json({ 
-      status: 'completed',
-      piData: response.data 
-    });
+    const verified = piResponse.data?.transaction?.verified ?? false;
 
-  } catch (error) {
-    const piError = error.response?.data || error.message;
-    console.error("COMPLETE ERROR:", piError);
-    res.status(error.response?.status || 500).json({ error: piError });
+    const { error } = await supabase
+      .from('transactions')
+      .update({
+        txid,
+        status: verified ? 'completed' : 'unverified'
+      })
+      .eq('payment_id', paymentId);
+
+    if (error) {
+      console.error("❌ Supabase update error:", error);
+      return res.status(500).json({ error: 'Supabase update fehlgeschlagen' });
+    }
+
+    res.json({
+      success: true,
+      txid,
+      payment_id: paymentId,
+      status: verified ? 'completed' : 'unverified',
+      piResponse: piResponse.data
+    });
+  } catch (err) {
+    console.error("❌ Fehler bei /complete-payment:", err.response?.data || err.message);
+    res.status(err.response?.status || 500).json({
+      error: err.response?.data?.error || err.message,
+      details: err.response?.data
+    });
   }
 });
+
 
 // 🚨 Zahlung abbrechen (Nur für Notfälle)
 app.post('/cancel-payment', validateApiKey, async (req, res) => {
