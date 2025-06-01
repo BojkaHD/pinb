@@ -97,25 +97,11 @@ app.post('/createPayment', async (req, res) => {
 });
 
 app.post('/submitPayment', async (req, res) => {
-  const { uid } = req.body;
-
   try {
-    // 🧍 Nutzer prüfen
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('uid')
-      .eq('uid', uid)
-      .single();
-
-    if (userError || !user) {
-      return res.status(404).json({ error: 'Benutzer nicht gefunden' });
-    }
-
-    // 🔎 Letzte "pending" Zahlung abrufen
+    // 🔎 Letzte "pending" Zahlung auslesen
     const { data: payments, error: paymentError } = await supabase
       .from('payments')
       .select('*')
-      .eq('uid', uid)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .limit(1);
@@ -201,7 +187,6 @@ app.post('/submitPayment', async (req, res) => {
     });
   }
 });
-
 
 app.post('/completePayment', async (req, res) => {
   const { paymentId } = req.body;
