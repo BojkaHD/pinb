@@ -276,7 +276,7 @@ app.post('/completePayment', async (req, res) => {
   }
 });
 
-app.post('/cancel-payment', validateApiKey, async (req, res) => {
+app.post('/cancel-payment', async (req, res) => {
   try {
     const { paymentId } = req.body;
     if (!paymentId) throw new Error("paymentId fehlt");
