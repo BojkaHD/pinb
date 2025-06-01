@@ -152,11 +152,12 @@ app.post('/submitPayment', async (req, res) => {
       .build();
 
     tx.sign(WALLET_KEYPAIR);
-    const txXDR = tx.toXDR();
+    const txXDR = tx.toEnvelope().toXDR('base64');
+
 console.log('[DEBUG] XDR:', txXDR);
     console.log('[DEBUG] txXDR length:', txXDR.length);
     console.log('[DEBUG] txXDR (preview):', txXDR.slice(0, 50) + '...');
-
+console.log('[DEBUG] XDR (envelope):', txXDR);
     console.log('[DEBUG] paymentId:', paymentId);
     console.log('[DEBUG] recipient:', recipient);
     console.log('[DEBUG] amount:', amount);
