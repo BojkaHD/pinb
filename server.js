@@ -106,12 +106,16 @@ app.post('/createPayment', async (req, res) => {
   }
 });
 
+
+
 app.post('/submitPayment', async (req, res) => {
   const { paymentId } = req.body;
 
   if (!paymentId) {
     return res.status(400).json({ error: 'paymentId fehlt im Body' });
   }
+
+  console.log('[DEBUG] submitted paymentId:', paymentId);
 
   try {
     // 1️⃣ Zahlung bei Pi abrufen
@@ -125,6 +129,8 @@ app.post('/submitPayment', async (req, res) => {
     const piData = piResponse.data;
     const envelopeXDR = piData.envelope_xdr;
 
+    console.log('[DEBUG] envelopeXDR von Pi:', piData.envelope_xdr);
+
     if (!envelopeXDR) {
       return res.status(400).json({ error: 'Keine envelope_xdr von Pi erhalten' });
     }
@@ -137,7 +143,7 @@ app.post('/submitPayment', async (req, res) => {
 
     const signedXDR = tx.toXDR();
 
-    console.log('[DEBUG] paymentId:', paymentId);
+    console.log('[DEBUG] paymentId für die Wallet-Signatur:', paymentId);
     console.log('[DEBUG] signed XDR:', signedXDR);
 
     // 4️⃣ Zurück an Pi übermitteln → Pi submitted zur Blockchain
