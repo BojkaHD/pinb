@@ -122,7 +122,7 @@ app.post('/submitPayment', async (req, res) => {
       return res.status(404).json({ error: 'Zahlung mit dieser paymentId nicht gefunden.' });
     }
 
-    const payment = payments[0];
+    //const payment = payments[0];
 
     // 2️⃣ Zahlung bei Pi abrufen
     const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
@@ -136,7 +136,7 @@ app.post('/submitPayment', async (req, res) => {
     const amount = piData.amount.toString();
 
     // 3️⃣ Transaktion vorbereiten
-    const server = new Server('https://api.testnet.minepi.com');
+    const server = new Server(HORIZON_URL);
     const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
 
     // Dynamische Gebühr berechnen
@@ -145,7 +145,7 @@ app.post('/submitPayment', async (req, res) => {
 
     const tx = new TransactionBuilder(account, {
   fee: dynamicFee,
-  networkPassphrase: 'Pi Testnet',
+  networkPassphrase: NETWORK_PASSPHRASE,
 })
   .addMemo(Memo.text(paymentId)) // 👈 WICHTIG: Memo = paymentId
   .addOperation(
@@ -214,13 +214,13 @@ app.post('/completePayment', async (req, res) => {
     const recipient = piData.to_address;
     const amount = piData.amount.toString();
 
-    const server = new Server('https://api.testnet.minepi.com');
+    const server = new Server(HORIZON_URL);
     const sourceKeypair = Keypair.fromSecret(WALLET_KEYPAIR);
     const account = await server.loadAccount(sourceKeypair.publicKey());
 
     const tx = new TransactionBuilder(account, {
       fee: '1000',
-      networkPassphrase: 'Pi Testnet',
+      networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(
         Operation.payment({
@@ -286,7 +286,7 @@ app.post('/cancel-payment', validateApiKey, async (req, res) => {
       {},
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
