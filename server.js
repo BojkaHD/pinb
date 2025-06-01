@@ -114,8 +114,6 @@ app.post('/submitPayment', async (req, res) => {
   }
 
   try {
-    const server = new Server(HORIZON_URL);
-
     // 1️⃣ Zahldaten von Pi holen
     const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
       headers: { Authorization: `Key ${PI_API_KEY}` },
@@ -129,56 +127,52 @@ app.post('/submitPayment', async (req, res) => {
       return res.status(400).json({ error: 'Memo zu lang (max. 28 Zeichen)' });
     }
 
-    // 2️⃣ Aktuelle Kontodaten laden (frischer seq_num!)
+    // 2️⃣ Aktuellen Account mit frischer Sequence holen
+    const server = new Server(HORIZON_URL);
     const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
 
+    // 3️⃣ Transaktion bauen
     const feeStats = await server.feeStats();
     const dynamicFee = feeStats.fee_charged?.max || '1000';
 
-    // 3️⃣ Transaktion bauen
     const tx = new TransactionBuilder(account, {
       fee: dynamicFee,
       networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addMemo(Memo.text(paymentId))
-      .addOperation(
-        Operation.payment({
-          destination: recipient,
-          asset: Asset.native(),
-          amount,
-        })
-      )
-      .setTimeout(0)
+      .addOperation(Operation.payment({
+        destination: recipient,
+        asset: Asset.native(),
+        amount,
+      }))
+      .setTimeout(60)
       .build();
 
     tx.sign(WALLET_KEYPAIR);
+
+    // 4️⃣ Signierte Transaktion an Pi übergeben (NICHT an Horizon!)
     const envelopeXDR = tx.toEnvelope().toXDR('base64');
-    
-    console.log('[DEBUG] Memo:', tx.memo.value); // Muss identisch sein mit paymentId
-    console.log('[DEBUG] XDR:', envelopeXDR); // ✅ korrekt
+
+    // 🔍 Debug
     console.log('[DEBUG] paymentId:', paymentId);
     console.log('[DEBUG] recipient:', recipient);
     console.log('[DEBUG] amount:', amount);
-    console.log('[DEBUG] SeqNum:', account.sequence);
+    console.log('[DEBUG] Memo:', tx.memo.value);
+    console.log('[DEBUG] XDR:', envelopeXDR);
 
-
-    // 4️⃣ Transaktion an Pi übermitteln
     const completeResponse = await axios.post(
-  `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-  {
-    txid: envelopeXDR  // ⚠️ nicht der Hash, sondern die XDR!
-  },
-  {
-    headers: {
-      Authorization: `Key ${PI_API_KEY}`
-    }
-  }
-);
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      { txid: envelopeXDR },
+      { headers: { Authorization: `Key ${PI_API_KEY}` } }
+    );
 
-    // 5️⃣ Optional: Supabase-Status aktualisieren
+    // 5️⃣ Supabase-Status aktualisieren (optional)
     await supabase
       .from('payments')
-      .update({ status: 'completed', txid })
+      .update({
+        status: 'completed',
+        txid: tx.hash().toString(),
+      })
       .eq('payment_id', paymentId);
 
     res.json({
@@ -196,6 +190,7 @@ app.post('/submitPayment', async (req, res) => {
     });
   }
 });
+
 
 app.post('/completePayment', async (req, res) => {
   const { paymentId } = req.body;
