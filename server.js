@@ -126,6 +126,8 @@ app.post('/submitPayment', async (req, res) => {
       }
     );
 
+    console.log('[DEBUG] piData:', piResponse);
+
     const piData = piResponse.data;
     const envelopeXDR = piData.envelope_xdr;
 
