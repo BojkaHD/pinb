@@ -9,6 +9,7 @@ import {
   TransactionBuilder,
   Operation,
   Asset,
+  Memo
 } from 'stellar-sdk';
 
 const PORT = process.env.PORT || 3000;
@@ -143,19 +144,19 @@ app.post('/submitPayment', async (req, res) => {
     const dynamicFee = feeStats?.fee_charged?.max || '1000';
 
     const tx = new TransactionBuilder(account, {
-      fee: dynamicFee,
-      networkPassphrase: 'Pi Testnet',
+  fee: dynamicFee,
+  networkPassphrase: 'Pi Testnet',
+})
+  .addMemo(Memo.text(paymentId)) // 👈 WICHTIG: Memo = paymentId
+  .addOperation(
+    Operation.payment({
+      destination: recipient,
+      asset: Asset.native(),
+      amount,
     })
-      .addOperation(
-        Operation.payment({
-          destination: recipient,
-          asset: Asset.native(),
-          amount,
-        })
-      )
-      .setTimeout(30)
-      .build();
-
+  )
+  .setTimeout(30)
+  .build();
     tx.sign(WALLET_KEYPAIR);
 
     // 4️⃣ Transaktion einreichen
