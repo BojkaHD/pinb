@@ -153,16 +153,14 @@ app.post('/submitPayment', async (req, res) => {
 
     tx.sign(WALLET_KEYPAIR);
     const envelopeXDR = tx.toEnvelope().toXDR('base64');
-
+    
+    console.log('[DEBUG] Memo:', tx.memo.value); // Muss identisch sein mit paymentId
     console.log('[DEBUG] XDR:', envelopeXDR); // ✅ korrekt
     console.log('[DEBUG] paymentId:', paymentId);
     console.log('[DEBUG] recipient:', recipient);
     console.log('[DEBUG] amount:', amount);
     console.log('[DEBUG] SeqNum:', account.sequence);
 
-// 3️⃣ Transaktion bei Stellar (Horizon) einreichen
-    const txResult = await server.submitTransaction(tx);
-    const txid = txResult.hash;
 
     // 4️⃣ Transaktion an Pi übermitteln
     const completeResponse = await axios.post(
