@@ -168,7 +168,7 @@ app.post('/submitPayment', async (req, res) => {
 
 
   const completeResponse = await axios.post(
-  `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+  `https://api.testnet.minepi.com/v2/payments/${paymentId}/complete`,
   {
     txid: txXDR, // ✅ Ja, XDR unter txid!
   },
