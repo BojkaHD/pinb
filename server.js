@@ -147,14 +147,15 @@ app.post('/submitPayment', async (req, res) => {
           amount,
         })
       )
-      .setTimeout(30)
+      .setTimeout(0)
       .build();
 
     tx.sign(WALLET_KEYPAIR);
 
     // Korrekt: XDR → aber als "txid" übergeben
     const txXDR = tx.toXDR();
-
+    
+    console.log('[DEBUG] maxTime:', tx.timeBounds?.maxTime);
     console.log('[DEBUG] paymentId:', paymentId);
     console.log('[DEBUG] paymentId length:', paymentId.length);
     console.log('[DEBUG] recipient:', recipient);
