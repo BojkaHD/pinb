@@ -9,7 +9,6 @@ import {
   TransactionBuilder,
   Operation,
   Asset,
-  BASE_FEE
 } from 'stellar-sdk';
 
 const PORT = process.env.PORT || 3000;
@@ -130,7 +129,7 @@ app.post('/submitPayment', async (req, res) => {
     const account = await server.loadAccount(sourceKeypair.publicKey());
 
     const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE,
+      fee: '1000',
       networkPassphrase: 'Pi Testnet',
     })
       .addOperation(
@@ -208,7 +207,7 @@ app.post('/completePayment', async (req, res) => {
     const account = await server.loadAccount(sourceKeypair.publicKey());
 
     const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE,
+      fee: '1000',
       networkPassphrase: 'Pi Testnet',
     })
       .addOperation(
