@@ -271,6 +271,115 @@ app.post('/completePayment', async (req, res) => {
   }
 });
 
+//Approve-Payment Teil für die DONATION
+app.post('/approve-payment', async (req, res) => {
+  const { paymentId, uid, username, wallet_address } = req.body;
+
+  if (!paymentId || !uid || !username) {
+    return res.status(400).json({ error: 'Fehlende Felder: paymentId, uid oder username' });
+  }
+
+  try {
+    // 1️⃣ Zahlung bei Pi abrufen (optional zur Validierung)
+    const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
+      headers: {
+        Authorization: `Key ${PI_API_KEY}`,
+      },
+    });
+
+    const piPayment = piResponse.data;
+
+    // 2️⃣ Daten validieren (optional – z. B. Betrag, Zieladresse)
+    if (
+      piPayment.amount !== 1 ||
+      piPayment.to_address !== APP_WALLET ||
+      piPayment.metadata?.purpose !== 'donation'
+    ) {
+      return res.status(400).json({ error: 'Zahlung nicht gültig für Spendenzweck' });
+    }
+
+    // 3️⃣ In Supabase-Tabelle "transactions" speichern
+    const { error: dbError } = await supabase.from('transactions').insert([
+      {
+        payment_id: paymentId,
+        wallet_address,
+        amount: piPayment.amount,
+        memo: piPayment.memo,
+        status: 'approved',
+        created_at: new Date().toISOString(),
+        username,
+        uid
+      }
+    ]);
+
+    if (dbError) {
+      console.error('❌ Fehler beim Speichern in Supabase:', dbError);
+      return res.status(500).json({ error: 'Fehler beim Speichern der Transaktion' });
+    }
+
+    // 4️⃣ Antwort an Pi SDK zurückgeben
+    res.json({ status: 'approved' });
+
+  } catch (err) {
+    console.error('❌ Fehler bei /approve-payment:', err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data?.error || err.message,
+      details: err.response?.data
+    });
+  }
+});
+
+//Complete-Payment Teil für die DONATION
+app.post('/complete-payment', async (req, res) => {
+  const { paymentId, txid } = req.body;
+
+  if (!paymentId || !txid) {
+    return res.status(400).json({ error: 'paymentId und txid erforderlich' });
+  }
+
+  try {
+    // 1️⃣ Zahlung bei Pi als abgeschlossen markieren
+    const piComplete = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      { txid },
+      {
+        headers: {
+          Authorization: `Key ${PI_API_KEY}`,
+        },
+      }
+    );
+
+    // 2️⃣ Supabase-Eintrag aktualisieren
+    const { error: dbError } = await supabase
+      .from('transactions')
+      .update({
+        status: 'completed',
+        txid,
+      })
+      .eq('payment_id', paymentId);
+
+    if (dbError) {
+      console.error('❌ Fehler beim Aktualisieren der Transaktion:', dbError);
+      return res.status(500).json({ error: 'Fehler beim Speichern des Abschlusses' });
+    }
+
+    res.json({
+      success: true,
+      txid,
+      paymentId,
+      pi: piComplete.data
+    });
+
+  } catch (err) {
+    console.error('❌ Fehler bei /complete-payment:', err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data?.error || err.message,
+      details: err.response?.data
+    });
+  }
+});
+
+
 app.post('/cancel-payment', async (req, res) => {
   try {
     const { paymentId } = req.body;
