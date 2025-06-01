@@ -143,10 +143,11 @@ app.post('/submitPayment', async (req, res) => {
     const feeStats = await server.feeStats();
     const dynamicFee = feeStats?.fee_charged?.max || '1000';
 
-    const tx = new TransactionBuilder(account, {
+  
+  const tx = new TransactionBuilder(account, {
   fee: dynamicFee,
   networkPassphrase: NETWORK_PASSPHRASE,
-})
+  })
   .addMemo(Memo.text(paymentId)) // 👈 WICHTIG: Memo = paymentId
   .addOperation(
     Operation.payment({
@@ -157,16 +158,15 @@ app.post('/submitPayment', async (req, res) => {
   )
   .setTimeout(30)
   .build();
-    tx.sign(WALLET_KEYPAIR);
+  
+  tx.sign(WALLET_KEYPAIR);
 
     // 4️⃣ Transaktion einreichen
-    const txResponse = await server.submitTransaction(tx);
-    const txid = txResponse.hash;
+    const txXDR = tx.toXDR();
 
-    // 5️⃣ Zahlung bei Pi als abgeschlossen markieren
     await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      { txid },
+      { txid: txXDR }, // 👉 XDR statt hash
       {
         headers: {
           Authorization: `Key ${PI_API_KEY}`,
