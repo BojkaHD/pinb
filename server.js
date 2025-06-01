@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
   Server,
   Keypair,
-  TransactionBuilder,
+  Transaction,
   Operation,
   Asset,
   Memo
@@ -114,72 +114,63 @@ app.post('/submitPayment', async (req, res) => {
   }
 
   try {
-    // 1️⃣ Zahldaten von Pi holen
-    const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
-      headers: { Authorization: `Key ${PI_API_KEY}` },
-    });
-
-    const payment = piResponse.data;
-    const recipient = payment.to_address;
-    const amount = payment.amount.toString();
-
-    if (paymentId.length > 28) {
-      return res.status(400).json({ error: 'Memo zu lang (max. 28 Zeichen)' });
-    }
-
-    // 2️⃣ Aktuellen Account mit frischer Sequence holen
-    const server = new Server(HORIZON_URL);
-    const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
-
-    // 3️⃣ Transaktion bauen
-    const feeStats = await server.feeStats();
-    const dynamicFee = feeStats.fee_charged?.max || '1000';
-
-    const tx = new TransactionBuilder(account, {
-      fee: dynamicFee,
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addMemo(Memo.text(paymentId))
-      .addOperation(Operation.payment({
-        destination: recipient,
-        asset: Asset.native(),
-        amount,
-      }))
-      .setTimeout(60)
-      .build();
-
-    tx.sign(WALLET_KEYPAIR);
-
-    // 4️⃣ Signierte Transaktion an Pi übergeben (NICHT an Horizon!)
-    const envelopeXDR = tx.toEnvelope().toXDR('base64');
-
-    // 🔍 Debug
-    console.log('[DEBUG] paymentId:', paymentId);
-    console.log('[DEBUG] recipient:', recipient);
-    console.log('[DEBUG] amount:', amount);
-    console.log('[DEBUG] Memo:', tx.memo.value);
-    console.log('[DEBUG] XDR:', envelopeXDR);
-
-    const completeResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      { txid: envelopeXDR },
-      { headers: { Authorization: `Key ${PI_API_KEY}` } }
+    // 1️⃣ Zahlung bei Pi abrufen
+    const piResponse = await axios.get(
+      `https://api.minepi.com/v2/payments/${paymentId}`,
+      {
+        headers: { Authorization: `Key ${PI_API_KEY}` },
+      }
     );
 
-    // 5️⃣ Supabase-Status aktualisieren (optional)
-    await supabase
+    const piData = piResponse.data;
+    const envelopeXDR = piData.envelope_xdr;
+
+    if (!envelopeXDR) {
+      return res.status(400).json({ error: 'Keine envelope_xdr von Pi erhalten' });
+    }
+
+    // 2️⃣ Transaktion aus XDR laden
+    const tx = new Transaction(envelopeXDR, NETWORK_PASSPHRASE);
+
+    // 3️⃣ Mit App-Wallet signieren
+    tx.sign(WALLET_KEYPAIR);
+
+    const signedXDR = tx.toXDR();
+
+    console.log('[DEBUG] paymentId:', paymentId);
+    console.log('[DEBUG] signed XDR:', signedXDR);
+
+    // 4️⃣ Zurück an Pi übermitteln → Pi submitted zur Blockchain
+    const submitResponse = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/submit`,
+      {
+        txid: signedXDR,
+      },
+      {
+        headers: {
+          Authorization: `Key ${PI_API_KEY}`,
+        },
+      }
+    );
+
+    // 5️⃣ Optional: In Supabase speichern
+    const { error: updateError } = await supabase
       .from('payments')
       .update({
-        status: 'completed',
+        status: 'submitted',
         txid: tx.hash().toString(),
       })
       .eq('payment_id', paymentId);
+
+    if (updateError) {
+      console.error('❌ Fehler beim Supabase-Update:', updateError);
+    }
 
     res.json({
       success: true,
       paymentId,
       txid: tx.hash().toString(),
-      pi: completeResponse.data,
+      pi: submitResponse.data,
     });
 
   } catch (err) {
