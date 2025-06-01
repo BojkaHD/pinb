@@ -103,21 +103,25 @@ app.post('/createPayment', async (req, res) => {
 });
 
 app.post('/submitPayment', async (req, res) => {
+  const { paymentId } = req.body;
+
+  if (!paymentId) {
+    return res.status(400).json({ error: 'paymentId muss im Body übergeben werden.' });
+  }
+
   try {
-    // 1️⃣ Neueste "pending" Zahlung aus Supabase abrufen
+    // 1️⃣ Zahlung in Supabase validieren (optional)
     const { data: payments, error: paymentError } = await supabase
       .from('payments')
       .select('*')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
+      .eq('payment_id', paymentId)
       .limit(1);
 
-    if (paymentError || payments.length === 0) {
-      return res.status(404).json({ error: 'Keine offene Zahlung gefunden.' });
+    if (paymentError || !payments || payments.length === 0) {
+      return res.status(404).json({ error: 'Zahlung mit dieser paymentId nicht gefunden.' });
     }
 
     const payment = payments[0];
-    const paymentId = payment.payment_id;
 
     // 2️⃣ Zahlung bei Pi abrufen
     const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
@@ -130,17 +134,17 @@ app.post('/submitPayment', async (req, res) => {
     const recipient = piData.to_address;
     const amount = piData.amount.toString();
 
-    // 3️⃣ Stellar-Konto laden & Gebühr berechnen
-    const server = new Server(HORIZON_URL);
+    // 3️⃣ Transaktion vorbereiten
+    const server = new Server('https://api.testnet.minepi.com');
     const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
 
+    // Dynamische Gebühr berechnen
     const feeStats = await server.feeStats();
-    const dynamicFee = feeStats?.fee_charged?.max || '1000'; // Fallback wenn leer
+    const dynamicFee = feeStats?.fee_charged?.max || '1000';
 
-    // 4️⃣ Transaktion bauen
-    const transaction = new TransactionBuilder(account, {
+    const tx = new TransactionBuilder(account, {
       fee: dynamicFee,
-      networkPassphrase: NETWORK_PASSPHRASE,
+      networkPassphrase: 'Pi Testnet',
     })
       .addOperation(
         Operation.payment({
@@ -152,13 +156,13 @@ app.post('/submitPayment', async (req, res) => {
       .setTimeout(30)
       .build();
 
-    transaction.sign(WALLET_KEYPAIR);
+    tx.sign(WALLET_KEYPAIR);
 
-    // 5️⃣ Transaktion absenden
-    const txResponse = await server.submitTransaction(transaction);
+    // 4️⃣ Transaktion einreichen
+    const txResponse = await server.submitTransaction(tx);
     const txid = txResponse.hash;
 
-    // 6️⃣ Zahlung bei Pi als abgeschlossen markieren
+    // 5️⃣ Zahlung bei Pi als abgeschlossen markieren
     await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
@@ -169,7 +173,7 @@ app.post('/submitPayment', async (req, res) => {
       }
     );
 
-    // 7️⃣ Supabase-Eintrag aktualisieren
+    // 6️⃣ Supabase-Eintrag aktualisieren
     const { error: updateError } = await supabase
       .from('payments')
       .update({
@@ -180,15 +184,11 @@ app.post('/submitPayment', async (req, res) => {
       .eq('payment_id', paymentId);
 
     if (updateError) {
-      console.error('❌ Supabase Update-Fehler:', updateError);
-      return res.status(500).json({ error: 'Datenbank-Update fehlgeschlagen.' });
+      console.error('❌ Fehler beim DB-Update:', updateError);
+      return res.status(500).json({ error: 'Supabase konnte nicht aktualisiert werden.' });
     }
 
-    res.json({
-      success: true,
-      txid,
-      status: 'completed',
-    });
+    res.json({ success: true, txid, status: 'completed' });
 
   } catch (err) {
     console.error('❌ Fehler bei /submitPayment:', err.response?.data || err.message);
@@ -214,7 +214,7 @@ app.post('/completePayment', async (req, res) => {
     const amount = piData.amount.toString();
 
     const server = new Server('https://api.testnet.minepi.com');
-    const sourceKeypair = Keypair.fromSecret(WALLET_SECRET);
+    const sourceKeypair = Keypair.fromSecret(WALLET_KEYPAIR);
     const account = await server.loadAccount(sourceKeypair.publicKey());
 
     const tx = new TransactionBuilder(account, {
