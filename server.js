@@ -73,7 +73,7 @@ app.post('/createPayment', async (req, res) => {
 
     // 🚀 Zahlung bei Pi anlegen
     const piResponse = await axios.post(
-      'https://api.minepi.com/v2/payments',
+      'https://api.testnet.minepi.com/v2/payments',
       paymentData,
       {
         headers: {
@@ -205,7 +205,7 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
     
     // ✅ WICHTIG: Testnet-URL verwenden
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
+      `https://api.testnet.minepi.com/v2/payments/approve`,
       {},
       {
         headers: {
@@ -275,7 +275,7 @@ app.post('/complete-payment', async (req, res) => {
 
   try {
     const piResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      `https://api.testnet.minepi.com/v2/payments/complete`,
       { txid },
       {
         headers: {
@@ -330,7 +330,7 @@ app.post('/cancel-payment', validateApiKey, async (req, res) => {
     if (!paymentId) throw new Error("paymentId fehlt");
 
     const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/cancel`,
+      `https://api.testnet.minepi.com/v2/payments/${paymentId}/cancel`,
       {},
       {
         headers: {
