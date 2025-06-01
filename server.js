@@ -167,7 +167,7 @@ app.post('/submitPayment', async (req, res) => {
     console.log('[DEBUG] SeqNum:', account.sequence);
 
 
-await axios.post(
+  const completeResponse = await axios.post(
   `https://api.minepi.com/v2/payments/${paymentId}/complete`,
   {
     txid: txXDR, // ✅ Ja, XDR unter txid!
