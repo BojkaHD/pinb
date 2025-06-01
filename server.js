@@ -131,39 +131,38 @@ app.post('/submitPayment', async (req, res) => {
     const dynamicFee = feeStats.fee_charged?.max || '1000';
 
     // 4️⃣ Transaktion mit Memo = paymentId
-    const transaction = new TransactionBuilder(account, {
-      fee: dynamicFee,
-      networkPassphrase: NETWORK_PASSPHRASE,
+    const tx = new TransactionBuilder(account, {
+  fee: dynamicFee,
+  networkPassphrase: NETWORK_PASSPHRASE,
+})
+  .addMemo(Memo.text(paymentId))
+  .addOperation(
+    Operation.payment({
+      destination: recipient,
+      asset: Asset.native(),
+      amount,
     })
-      .addMemo(Memo.text(paymentId))
-      .addOperation(
-        Operation.payment({
-          destination: recipient,
-          asset: Asset.native(),
-          amount,
-        })
-      )
-      .setTimeout(30)
-      .build();
+  )
+  .setTimeout(30)
+  .build();
 
-    // 5️⃣ Signieren
-    transaction.sign(WALLET_KEYPAIR);
+tx.sign(WALLET_KEYPAIR);
 
-    // 6️⃣ In XDR umwandeln
-    const txXDR = transaction.toXDR();
+// Korrekt: XDR → aber als "txid" übergeben
+const txXDR = tx.toXDR();
 
-    // 7️⃣ Transaktion an Pi übergeben
-    const completeResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      {
-        tx_envelope: txXDR, // ✅ richtig! NICHT "txid"
-      },
-      {
-        headers: {
-          Authorization: `Key ${PI_API_KEY}`,
-        },
-      }
-    );
+await axios.post(
+  `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+  {
+    txid: txXDR, // ✅ Ja, XDR unter txid!
+  },
+  {
+    headers: {
+      Authorization: `Key ${PI_API_KEY}`,
+    },
+  }
+);
+
 
     // 8️⃣ Erfolg an Client zurück
     res.json({
