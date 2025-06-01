@@ -24,6 +24,13 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
+// Stellar & Pi-Konfiguration
+const PI_API_KEY = process.env.PI_API_KEY_TESTNET;
+const WALLET_SECRET = process.env.APP_SECRET_KEY_TESTNET;
+const WALLET_KEYPAIR = Keypair.fromSecret(WALLET_SECRET);
+const HORIZON_URL = 'https://api.testnet.minepi.com';
+const NETWORK_PASSPHRASE = 'Pi Testnet';
+
 // Route: create-payment
 app.post('/createPayment', async (req, res) => {
   const { uid, amount, memo } = req.body;
@@ -56,7 +63,7 @@ app.post('/createPayment', async (req, res) => {
       paymentData,
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
@@ -97,7 +104,7 @@ app.post('/createPayment', async (req, res) => {
 
 app.post('/submitPayment', async (req, res) => {
   try {
-    // 🔎 Letzte "pending" Zahlung auslesen
+    // 1️⃣ Neueste "pending" Zahlung aus Supabase abrufen
     const { data: payments, error: paymentError } = await supabase
       .from('payments')
       .select('*')
@@ -106,16 +113,16 @@ app.post('/submitPayment', async (req, res) => {
       .limit(1);
 
     if (paymentError || payments.length === 0) {
-      return res.status(404).json({ error: 'Keine offene Zahlung gefunden' });
+      return res.status(404).json({ error: 'Keine offene Zahlung gefunden.' });
     }
 
     const payment = payments[0];
     const paymentId = payment.payment_id;
 
-    // 📡 Zahlung bei Pi abrufen
+    // 2️⃣ Zahlung bei Pi abrufen
     const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
       headers: {
-        Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+        Authorization: `Key ${PI_API_KEY}`,
       },
     });
 
@@ -123,14 +130,17 @@ app.post('/submitPayment', async (req, res) => {
     const recipient = piData.to_address;
     const amount = piData.amount.toString();
 
-    // 💸 Stellar-Transaktion bauen & senden
-    const server = new Server('https://api.testnet.minepi.com');
-    const sourceKeypair = Keypair.fromSecret(process.env.APP_SECRET_KEY_TESTNET);
-    const account = await server.loadAccount(sourceKeypair.publicKey());
+    // 3️⃣ Stellar-Konto laden & Gebühr berechnen
+    const server = new Server(HORIZON_URL);
+    const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
 
-    const tx = new TransactionBuilder(account, {
-      fee: '1000',
-      networkPassphrase: 'Pi Testnet',
+    const feeStats = await server.feeStats();
+    const dynamicFee = feeStats?.fee_charged?.max || '1000'; // Fallback wenn leer
+
+    // 4️⃣ Transaktion bauen
+    const transaction = new TransactionBuilder(account, {
+      fee: dynamicFee,
+      networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(
         Operation.payment({
@@ -142,47 +152,48 @@ app.post('/submitPayment', async (req, res) => {
       .setTimeout(30)
       .build();
 
-    tx.sign(sourceKeypair);
+    transaction.sign(WALLET_KEYPAIR);
 
-    const txResponse = await server.submitTransaction(tx);
+    // 5️⃣ Transaktion absenden
+    const txResponse = await server.submitTransaction(transaction);
     const txid = txResponse.hash;
 
-    // ✅ Zahlung bei Pi bestätigen
+    // 6️⃣ Zahlung bei Pi als abgeschlossen markieren
     await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY}`,
         },
       }
     );
 
-    // 🧾 Supabase aktualisieren
+    // 7️⃣ Supabase-Eintrag aktualisieren
     const { error: updateError } = await supabase
       .from('payments')
       .update({
         status: 'completed',
         txid,
-        sender: piData.user_uid
+        sender: piData.user_uid,
       })
       .eq('payment_id', paymentId);
 
     if (updateError) {
-      console.error('❌ Fehler beim Aktualisieren:', updateError);
-      return res.status(500).json({ error: 'Fehler beim Aktualisieren der Zahlung' });
+      console.error('❌ Supabase Update-Fehler:', updateError);
+      return res.status(500).json({ error: 'Datenbank-Update fehlgeschlagen.' });
     }
 
     res.json({
       success: true,
       txid,
-      status: 'completed'
+      status: 'completed',
     });
 
   } catch (err) {
     console.error('❌ Fehler bei /submitPayment:', err.response?.data || err.message);
     res.status(500).json({
-      error: err.response?.data?.error || err.message
+      error: err.response?.data?.error || err.message,
     });
   }
 });
@@ -194,7 +205,7 @@ app.post('/completePayment', async (req, res) => {
     // 📡 Zahlung laden
     const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
       headers: {
-        Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+        Authorization: `Key ${PI_API_KEY}`,
       },
     });
 
@@ -203,7 +214,7 @@ app.post('/completePayment', async (req, res) => {
     const amount = piData.amount.toString();
 
     const server = new Server('https://api.testnet.minepi.com');
-    const sourceKeypair = Keypair.fromSecret(process.env.APP_SECRET_KEY_TESTNET);
+    const sourceKeypair = Keypair.fromSecret(WALLET_SECRET);
     const account = await server.loadAccount(sourceKeypair.publicKey());
 
     const tx = new TransactionBuilder(account, {
@@ -231,7 +242,7 @@ app.post('/completePayment', async (req, res) => {
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY}`,
         },
       }
     );
