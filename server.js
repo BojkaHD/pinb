@@ -45,15 +45,29 @@ const validateApiKey = (req, res, next) => {
 
 // ✅ Zahlung genehmigen (Developer Approval)
 app.post('/approve-payment', validateApiKey, async (req, res) => {
-  const { paymentId, uid, username, wallet_address } = req.body;
-
-  if (!paymentId || !uid || !username) {
-    return res.status(400).json({ error: "Erforderliche Felder fehlen (paymentId, uid, username)" });
-  }
-
   try {
-    // Pi: Zahlung genehmigen
-    const piResponse = await axios.post(
+    const { paymentId, uid, username, wallet_address } = req.body;
+
+    if (!paymentId || !uid || !username) {
+      return res.status(400).json({ error: "Benötigte Felder fehlen" });
+    }
+
+    // 💡 Schritt 1: Pi-Zahlung abrufen für amount + memo
+    const paymentResponse = await axios.get(
+      `https://api.minepi.com/v2/payments/${paymentId}`,
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+        }
+      }
+    );
+
+    const piData = paymentResponse.data;
+    const amount = piData.amount;
+    const memo = piData.memo || '';
+
+    // ✅ Schritt 2: Pi-Zahlung genehmigen
+    await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/approve`,
       {},
       {
@@ -64,29 +78,40 @@ app.post('/approve-payment', validateApiKey, async (req, res) => {
       }
     );
 
-    // 🔁 In Supabase eintragen
-    const { error } = await supabase.from('transactions').insert([{
-      payment_id: paymentId,
-      uid,
-      username,
-      wallet_address,
-      status: 'approved',
-      created_at: new Date().toISOString()
-    }]);
+    // 💾 Schritt 3: Supabase-Eintrag in transactions speichern
+    const { error } = await supabase
+      .from('transactions')
+      .insert([{
+        payment_id: paymentId,
+        uid,
+        username,
+        wallet_address,
+        amount,
+        memo,
+        status: 'approved',
+        created_at: new Date().toISOString()
+      }]);
 
     if (error) {
-      console.error("❌ Fehler beim Eintragen in transactions:", error);
-      return res.status(500).json({ error: "Fehler beim Eintrag in Supabase" });
+      console.error('❌ Fehler beim Eintragen in transactions:', error);
+      return res.status(500).json({ error: 'Fehler beim Speichern in Supabase' });
     }
 
-    res.json({ success: true, status: 'approved', piData: piResponse.data });
-  } catch (err) {
-    console.error("❌ Fehler bei /approve-payment:", err.response?.data || err.message);
-    res.status(err.response?.status || 500).json({
-      error: err.response?.data?.error || err.message
+    res.json({
+      success: true,
+      status: 'approved',
+      paymentId,
+      amount,
+      memo
     });
+
+  } catch (error) {
+    const piError = error.response?.data || error.message;
+    console.error("❌ APPROVE ERROR:", piError);
+    res.status(error.response?.status || 500).json({ error: piError });
   }
 });
+
 
 // ✅ Zahlung abschließen (mit Blockchain TXID)
 // ✅ Spende abschließen: /complete-payment
