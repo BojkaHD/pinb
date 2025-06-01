@@ -276,6 +276,29 @@ app.post('/completePayment', async (req, res) => {
   }
 });
 
+app.post('/cancel-payment', validateApiKey, async (req, res) => {
+  try {
+    const { paymentId } = req.body;
+    if (!paymentId) throw new Error("paymentId fehlt");
+
+    const response = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/cancel`,
+      {},
+      {
+        headers: {
+          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.json({ status: 'cancelled', piData: response.data });
+  } catch (error) {
+    const piError = error.response?.data?.error_message || error.message;
+    console.error("CANCEL ERROR:", piError);
+    res.status(error.response?.status || 500).json({ error: piError });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`✅ Server läuft auf Port ${PORT}`);
