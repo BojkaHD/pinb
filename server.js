@@ -127,7 +127,6 @@ app.post('/submitPayment', async (req, res) => {
 
     // 2️⃣ Stellar-Konto laden
     const server = new Server(HORIZON_URL);
-    const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
 
     // 3️⃣ Dynamische Gebühr holen
     const feeStats = await server.feeStats();
@@ -137,7 +136,7 @@ app.post('/submitPayment', async (req, res) => {
     if (paymentId.length > 28) {
       return res.status(400).json({ error: 'paymentId überschreitet Memo-Länge (28 Zeichen)' });
     }
-    
+    const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
     const tx = new TransactionBuilder(account, {
       fee: dynamicFee,
       networkPassphrase: NETWORK_PASSPHRASE,
@@ -165,6 +164,7 @@ app.post('/submitPayment', async (req, res) => {
     console.log('[DEBUG] amount:', amount);
     console.log('[DEBUG] XDR:', tx.toXDR());
     console.log('[DEBUG] Memo:', tx.memo);
+    console.log('[DEBUG] SeqNum:', account.sequence);
 
 
 await axios.post(
