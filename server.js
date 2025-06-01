@@ -114,33 +114,32 @@ app.post('/submitPayment', async (req, res) => {
   }
 
   try {
-    // 1️⃣ Zahlung prüfen
+    const server = new Server(HORIZON_URL);
+
+    // 1️⃣ Zahldaten von Pi holen
     const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
-      headers: {
-        Authorization: `Key ${PI_API_KEY}`,
-      },
+      headers: { Authorization: `Key ${PI_API_KEY}` },
     });
 
     const payment = piResponse.data;
     const recipient = payment.to_address;
     const amount = payment.amount.toString();
 
-    // 2️⃣ Stellar-Konto laden
-    const server = new Server(HORIZON_URL);
+    if (paymentId.length > 28) {
+      return res.status(400).json({ error: 'Memo zu lang (max. 28 Zeichen)' });
+    }
 
-    // 3️⃣ Dynamische Gebühr holen
+    // 2️⃣ Aktuelle Kontodaten laden (frischer seq_num!)
+    const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
+
     const feeStats = await server.feeStats();
     const dynamicFee = feeStats.fee_charged?.max || '1000';
 
-    // 4️⃣ Transaktion mit Memo = paymentId
-    if (paymentId.length > 28) {
-      return res.status(400).json({ error: 'paymentId überschreitet Memo-Länge (28 Zeichen)' });
-    }
-    const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
+    // 3️⃣ Transaktion bauen
     const tx = new TransactionBuilder(account, {
       fee: dynamicFee,
       networkPassphrase: NETWORK_PASSPHRASE,
-      })
+    })
       .addMemo(Memo.text(paymentId))
       .addOperation(
         Operation.payment({
@@ -153,38 +152,30 @@ app.post('/submitPayment', async (req, res) => {
       .build();
 
     tx.sign(WALLET_KEYPAIR);
-
-    // Korrekt: XDR → aber als "txid" übergeben
     const txXDR = tx.toXDR();
-    
-    console.log('[DEBUG] maxTime:', tx.timeBounds?.maxTime);
+
     console.log('[DEBUG] paymentId:', paymentId);
-    console.log('[DEBUG] paymentId length:', paymentId.length);
     console.log('[DEBUG] recipient:', recipient);
     console.log('[DEBUG] amount:', amount);
-    console.log('[DEBUG] XDR:', tx.toXDR());
-    console.log('[DEBUG] Memo:', tx.memo);
     console.log('[DEBUG] SeqNum:', account.sequence);
 
+    // 4️⃣ Transaktion an Pi übermitteln
+    const completeResponse = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      { txid: txXDR },
+      { headers: { Authorization: `Key ${PI_API_KEY}` } }
+    );
 
-  const completeResponse = await axios.post(
-  `https://api.testnet.minepi.com/v2/payments/${paymentId}/complete`,
-  {
-    txid: txXDR, // ✅ Ja, XDR unter txid!
-  },
-  {
-    headers: {
-      Authorization: `Key ${PI_API_KEY}`,
-    },
-  }
-);
+    // 5️⃣ Optional: Supabase-Status aktualisieren
+    await supabase
+      .from('payments')
+      .update({ status: 'completed', txid: tx.hash().toString() })
+      .eq('payment_id', paymentId);
 
-
-    // 8️⃣ Erfolg an Client zurück
     res.json({
       success: true,
-      completed: true,
       paymentId,
+      txid: tx.hash().toString(),
       pi: completeResponse.data,
     });
 
