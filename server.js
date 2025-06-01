@@ -12,6 +12,8 @@ import {
   BASE_FEE
 } from 'stellar-sdk';
 
+const PORT = process.env.PORT || 3000;
+
 dotenv.config();
 
 const app = express();
@@ -22,13 +24,6 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
-
-// Konfiguration
-const PI_API_KEY = process.env.PI_API_KEY_TESTNET;
-const WALLET_SECRET = process.env.APP_SECRET_KEY_TESTNET;
-const WALLET_KEYPAIR = Keypair.fromSecret(WALLET_SECRET);
-const HORIZON_URL = 'https://api.testnet.minepi.com';
-const NETWORK_PASSPHRASE = 'Pi Testnet';
 
 // Route: create-payment
 app.post('/createPayment', async (req, res) => {
@@ -283,4 +278,9 @@ app.post('/completePayment', async (req, res) => {
       error: err.response?.data?.error || err.message
     });
   }
+});
+
+
+app.listen(PORT, () => {
+  console.log(`✅ Server läuft auf Port ${PORT}`);
 });
