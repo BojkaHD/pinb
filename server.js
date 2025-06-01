@@ -107,66 +107,57 @@ app.post('/submitPayment', async (req, res) => {
   const { paymentId } = req.body;
 
   if (!paymentId) {
-    return res.status(400).json({ error: 'paymentId muss im Body übergeben werden.' });
+    return res.status(400).json({ error: 'paymentId fehlt im Body' });
   }
 
   try {
-    // 1️⃣ Zahlung in Supabase validieren (optional)
-    const { data: payments, error: paymentError } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('payment_id', paymentId)
-      .limit(1);
-
-    if (paymentError || !payments || payments.length === 0) {
-      return res.status(404).json({ error: 'Zahlung mit dieser paymentId nicht gefunden.' });
-    }
-
-    //const payment = payments[0];
-
-    // 2️⃣ Zahlung bei Pi abrufen
+    // 1️⃣ Zahlung prüfen
     const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
       headers: {
         Authorization: `Key ${PI_API_KEY}`,
       },
     });
 
-    const piData = piResponse.data;
-    const recipient = piData.to_address;
-    const amount = piData.amount.toString();
+    const payment = piResponse.data;
+    const recipient = payment.to_address;
+    const amount = payment.amount.toString();
 
-    // 3️⃣ Transaktion vorbereiten
+    // 2️⃣ Stellar-Konto laden
     const server = new Server(HORIZON_URL);
     const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
 
-    // Dynamische Gebühr berechnen
+    // 3️⃣ Dynamische Gebühr holen
     const feeStats = await server.feeStats();
-    const dynamicFee = feeStats?.fee_charged?.max || '1000';
+    const dynamicFee = feeStats.fee_charged?.max || '1000';
 
-  
-  const tx = new TransactionBuilder(account, {
-  fee: dynamicFee,
-  networkPassphrase: NETWORK_PASSPHRASE,
-  })
-  .addMemo(Memo.text(paymentId)) // 👈 WICHTIG: Memo = paymentId
-  .addOperation(
-    Operation.payment({
-      destination: recipient,
-      asset: Asset.native(),
-      amount,
+    // 4️⃣ Transaktion mit Memo = paymentId
+    const transaction = new TransactionBuilder(account, {
+      fee: dynamicFee,
+      networkPassphrase: NETWORK_PASSPHRASE,
     })
-  )
-  .setTimeout(30)
-  .build();
-  
-  tx.sign(WALLET_KEYPAIR);
+      .addMemo(Memo.text(paymentId))
+      .addOperation(
+        Operation.payment({
+          destination: recipient,
+          asset: Asset.native(),
+          amount,
+        })
+      )
+      .setTimeout(30)
+      .build();
 
-    // 4️⃣ Transaktion einreichen
-    const txXDR = tx.toXDR();
+    // 5️⃣ Signieren
+    transaction.sign(WALLET_KEYPAIR);
 
-    await axios.post(
+    // 6️⃣ In XDR umwandeln
+    const txXDR = transaction.toXDR();
+
+    // 7️⃣ Transaktion an Pi übergeben
+    const completeResponse = await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      { txid: txXDR }, // 👉 XDR statt hash
+      {
+        tx_envelope: txXDR, // ✅ richtig! NICHT "txid"
+      },
       {
         headers: {
           Authorization: `Key ${PI_API_KEY}`,
@@ -174,27 +165,19 @@ app.post('/submitPayment', async (req, res) => {
       }
     );
 
-    // 6️⃣ Supabase-Eintrag aktualisieren
-    const { error: updateError } = await supabase
-      .from('payments')
-      .update({
-        status: 'completed',
-        txid,
-        sender: piData.user_uid,
-      })
-      .eq('payment_id', paymentId);
-
-    if (updateError) {
-      console.error('❌ Fehler beim DB-Update:', updateError);
-      return res.status(500).json({ error: 'Supabase konnte nicht aktualisiert werden.' });
-    }
-
-    res.json({ success: true, txid, status: 'completed' });
+    // 8️⃣ Erfolg an Client zurück
+    res.json({
+      success: true,
+      completed: true,
+      paymentId,
+      pi: completeResponse.data,
+    });
 
   } catch (err) {
     console.error('❌ Fehler bei /submitPayment:', err.response?.data || err.message);
     res.status(500).json({
       error: err.response?.data?.error || err.message,
+      details: err.response?.data,
     });
   }
 });
