@@ -131,24 +131,35 @@ app.post('/submitPayment', async (req, res) => {
     const dynamicFee = feeStats.fee_charged?.max || '1000';
 
     // 4️⃣ Transaktion mit Memo = paymentId
+    if (paymentId.length > 28) {
+      return res.status(400).json({ error: 'paymentId überschreitet Memo-Länge (28 Zeichen)' });
+    }
+    
     const tx = new TransactionBuilder(account, {
-  fee: dynamicFee,
-  networkPassphrase: NETWORK_PASSPHRASE,
-})
-  .addMemo(Memo.text(paymentId))
-  .addOperation(
-    Operation.payment({
-      destination: recipient,
-      asset: Asset.native(),
-      amount,
-    })
-  )
-  .setTimeout(30)
-  .build();
+      fee: dynamicFee,
+      networkPassphrase: NETWORK_PASSPHRASE,
+      })
+      .addMemo(Memo.text(paymentId))
+      .addOperation(
+        Operation.payment({
+          destination: recipient,
+          asset: Asset.native(),
+          amount,
+        })
+      )
+      .setTimeout(30)
+      .build();
 
-tx.sign(WALLET_KEYPAIR);
+    tx.sign(WALLET_KEYPAIR);
 
-// Korrekt: XDR → aber als "txid" übergeben
+    console.log('[DEBUG] paymentId:', paymentId);
+    console.log('[DEBUG] paymentId length:', paymentId.length);
+    console.log('[DEBUG] recipient:', recipient);
+    console.log('[DEBUG] amount:', amount);
+    console.log('[DEBUG] XDR:', transaction.toXDR());
+    console.log('[DEBUG] Memo:', transaction.memo);
+
+    // Korrekt: XDR → aber als "txid" übergeben
 const txXDR = tx.toXDR();
 
 await axios.post(
