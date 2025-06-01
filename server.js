@@ -152,15 +152,16 @@ app.post('/submitPayment', async (req, res) => {
 
     tx.sign(WALLET_KEYPAIR);
 
+    // Korrekt: XDR → aber als "txid" übergeben
+    const txXDR = tx.toXDR();
+
     console.log('[DEBUG] paymentId:', paymentId);
     console.log('[DEBUG] paymentId length:', paymentId.length);
     console.log('[DEBUG] recipient:', recipient);
     console.log('[DEBUG] amount:', amount);
-    console.log('[DEBUG] XDR:', transaction.toXDR());
-    console.log('[DEBUG] Memo:', transaction.memo);
+    console.log('[DEBUG] XDR:', tx.toXDR());
+    console.log('[DEBUG] Memo:', tx.memo);
 
-    // Korrekt: XDR → aber als "txid" übergeben
-const txXDR = tx.toXDR();
 
 await axios.post(
   `https://api.minepi.com/v2/payments/${paymentId}/complete`,
