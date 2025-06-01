@@ -152,28 +152,35 @@ app.post('/submitPayment', async (req, res) => {
       .build();
 
     tx.sign(WALLET_KEYPAIR);
-    const txXDR = tx.toEnvelope().toXDR('base64');
+    const envelopeXDR = tx.toEnvelope().toXDR('base64');
 
-console.log('[DEBUG] XDR:', txXDR);
-    console.log('[DEBUG] txXDR length:', txXDR.length);
-    console.log('[DEBUG] txXDR (preview):', txXDR.slice(0, 50) + '...');
-console.log('[DEBUG] XDR (envelope):', txXDR);
+    console.log('[DEBUG] XDR:', envelopeXDR); // ✅ korrekt
     console.log('[DEBUG] paymentId:', paymentId);
     console.log('[DEBUG] recipient:', recipient);
     console.log('[DEBUG] amount:', amount);
     console.log('[DEBUG] SeqNum:', account.sequence);
 
+// 3️⃣ Transaktion bei Stellar (Horizon) einreichen
+    const txResult = await server.submitTransaction(tx);
+    const txid = txResult.hash;
+
     // 4️⃣ Transaktion an Pi übermitteln
     const completeResponse = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      { txid: txXDR },
-      { headers: { Authorization: `Key ${PI_API_KEY}` } }
-    );
+  `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+  {
+    txid: envelopeXDR  // ⚠️ nicht der Hash, sondern die XDR!
+  },
+  {
+    headers: {
+      Authorization: `Key ${PI_API_KEY}`
+    }
+  }
+);
 
     // 5️⃣ Optional: Supabase-Status aktualisieren
     await supabase
       .from('payments')
-      .update({ status: 'completed', txid: tx.hash().toString() })
+      .update({ status: 'completed', txid })
       .eq('payment_id', paymentId);
 
     res.json({
