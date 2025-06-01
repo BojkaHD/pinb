@@ -32,6 +32,9 @@ const WALLET_KEYPAIR = Keypair.fromSecret(WALLET_SECRET);
 const HORIZON_URL = 'https://api.testnet.minepi.com';
 const NETWORK_PASSPHRASE = 'Pi Testnet';
 
+console.log('[DEBUG] Absender PublicKey:', WALLET_KEYPAIR.publicKey()); // 👈 HIER
+
+
 // Route: create-payment
 app.post('/createPayment', async (req, res) => {
   const { uid, amount, memo } = req.body;
