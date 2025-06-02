@@ -19,6 +19,14 @@ dotenv.config();
 const app = express();
 app.use(bodyParser.json());
 
+// 🔍 API-Key Validierung Middleware
+const validateApiKey = (req, res, next) => {
+  if (!process.env.PI_API_KEY_TESTNET) {
+    return res.status(500).json({ error: "PI_API_KEY_TESTNET nicht konfiguriert" });
+  }
+  next();
+};
+
 // Supabase-Verbindung
 const supabase = createClient(
   process.env.SUPABASE_URL,
