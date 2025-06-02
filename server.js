@@ -1,173 +1,276 @@
-import dotenv from 'dotenv';
 import express from 'express';
-import cors from 'cors';
 import bodyParser from 'body-parser';
 import axios from 'axios';
+import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import {
+  Server,
+  Keypair,
+  TransactionBuilder,
+  Operation,
+  Asset,
+  Memo
+} from 'stellar-sdk';
+
+const PORT = process.env.PORT || 3000;
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.use(bodyParser.json());
 
-// 🔗 Supabase Initialisierung
+// Supabase-Verbindung
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
-// ✅ Erlaubte Domains (Frontend + Pi-Sandbox)
-const allowedOrigins = [
-  'https://pinb.app',
-  'https://sandbox.minepi.com'
-];
+// Stellar & Pi-Konfiguration
+const PI_API_KEY = process.env.PI_API_KEY_TESTNET;
+const WALLET_SECRET = process.env.APP_SECRET_KEY_TESTNET;
+const WALLET_KEYPAIR = Keypair.fromSecret(WALLET_SECRET);
+const HORIZON_URL = 'https://api.testnet.minepi.com';
+const NETWORK_PASSPHRASE = 'Pi Testnet';
 
-// 🔒 CORS-Sicherheit
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
-      callback(null, true);
-    } else {
-      callback(new Error(`🚫 Blockierter Origin: ${origin}`));
-    }
+console.log('[DEBUG] Absender PublicKey:', WALLET_KEYPAIR.publicKey());
+
+//CreatePayment Teil für App-To-User Zahlung
+app.post('/createPayment', async (req, res) => {
+  const { uid, amount, memo } = req.body;
+
+  // 🔎 Nutzer validieren
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('uid')
+    .eq('uid', uid)
+    .single();
+
+  if (userError || !user) {
+    return res.status(400).json({ error: 'User nicht gefunden.' });
   }
-}));
 
-app.use(bodyParser.json());
-
-// 🔍 API-Key Validierung Middleware
-const validateApiKey = (req, res, next) => {
-  if (!process.env.PI_API_KEY_TESTNET) {
-    return res.status(500).json({ error: "PI_API_KEY_TESTNET nicht konfiguriert" });
-  }
-  next();
-};
-
-// ✅ Zahlung genehmigen (Developer Approval)
-app.post('/approve-payment', validateApiKey, async (req, res) => {
   try {
-    const { paymentId, uid, username, wallet_address } = req.body;
-
-    if (!paymentId || !uid || !username) {
-      return res.status(400).json({ error: "Benötigte Felder fehlen" });
-    }
-
-    // 💡 Schritt 1: Pi-Zahlung abrufen für amount + memo
-    const paymentResponse = await axios.get(
-      `https://api.minepi.com/v2/payments/${paymentId}`,
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
-        }
+    // 📦 Zahlung vorbereiten
+    const paymentData = {
+      payment: {
+        amount,
+        memo,
+        metadata: { purpose: "App2User", uid },
+        uid
       }
-    );
+    };
 
-    const piData = paymentResponse.data;
-    const amount = piData.amount;
-    const memo = piData.memo || '';
-
-    // ✅ Schritt 2: Pi-Zahlung genehmigen
-    await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/approve`,
-      {},
+    // 🚀 Zahlung bei Pi anlegen
+    const piResponse = await axios.post(
+      'https://api.minepi.com/v2/payments',
+      paymentData,
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
     );
 
-    // 💾 Schritt 3: Supabase-Eintrag in transactions speichern
-    const { error } = await supabase
-      .from('transactions')
-      .insert([{
-        payment_id: paymentId,
-        uid,
-        username,
-        wallet_address,
-        amount,
-        memo,
-        status: 'approved',
-        created_at: new Date().toISOString()
-      }]);
+    const piPayment = piResponse.data;
 
-    if (error) {
-      console.error('❌ Fehler beim Eintragen in transactions:', error);
+    // 💾 Speichern in Supabase (Table: payments)
+    const { error: dbError } = await supabase.from('payments').insert([
+      {
+        payment_id: piPayment.identifier,
+        uid: user.uid,
+        sender: 'App',
+        amount: parseFloat(amount),
+        status: 'pending',
+        metadata: { memo }
+      }
+    ]);
+
+    if (dbError) {
+      console.error('❌ Supabase Insert Fehler:', dbError);
       return res.status(500).json({ error: 'Fehler beim Speichern in Supabase' });
     }
 
     res.json({
       success: true,
-      status: 'approved',
-      paymentId,
-      amount,
-      memo
+      payment_id: piPayment.identifier,
+      payment: piPayment
     });
 
-  } catch (error) {
-    const piError = error.response?.data || error.message;
-    console.error("❌ APPROVE ERROR:", piError);
-    res.status(error.response?.status || 500).json({ error: piError });
+  } catch (err) {
+    console.error('❌ Fehler bei createPayment:', err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data?.error || err.message
+    });
   }
 });
 
+//SubmitPayment Teil für App-To-User Zahlung
+app.post('/submitPayment', async (req, res) => {
+  const { paymentId } = req.body;
 
-// ✅ Zahlung abschließen (mit Blockchain TXID)
-// ✅ Spende abschließen: /complete-payment
-app.post('/complete-payment', validateApiKey, async (req, res) => {
-  const { paymentId, txid } = req.body;
-
-  if (!paymentId || !txid) {
-    return res.status(400).json({ error: "paymentId oder txid fehlt" });
+  if (!paymentId) {
+    return res.status(400).json({ error: 'paymentId fehlt im Body' });
   }
 
+  console.log('[DEBUG] submitted paymentId:', paymentId);
+
   try {
-    const piResponse = await axios.post(
+    // 1️⃣ Pi Payment abrufen
+    const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
+      headers: { Authorization: `Key ${PI_API_KEY}` },
+    });
+
+    const payment = piResponse.data;
+    console.log('[DEBUG] piResponse-Data:', piResponse.data);
+    const recipient = payment.to_address;
+    const amount = payment.amount.toString();
+
+    if (paymentId.length > 28) {
+      return res.status(400).json({ error: 'Memo zu lang (max. 28 Zeichen)' });
+    }
+
+    const server = new Server(HORIZON_URL);
+    const account = await server.loadAccount(WALLET_KEYPAIR.publicKey());
+
+    const feeStats = await server.feeStats();
+    const dynamicFee = feeStats.fee_charged?.max || '1000';
+
+    // 2️⃣ Transaktion bauen & signieren
+    const tx = new TransactionBuilder(account, {
+      fee: dynamicFee,
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addMemo(Memo.text(paymentId))
+      .addOperation(Operation.payment({
+        destination: recipient,
+        asset: Asset.native(),
+        amount,
+      }))
+      .setTimeout(60)
+      .build();
+
+    tx.sign(WALLET_KEYPAIR);
+
+    // 3️⃣ Transaktion zu Stellar senden
+    const txResult = await server.submitTransaction(tx);
+    const txid = txResult.hash;
+
+    console.log('[DEBUG] txid zu Stellar gesendet:', txid);
+
+    // 4️⃣ Jetzt bei Pi als "complete" markieren
+    const completeResponse = await axios.post(
+      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
+      { txid }, // ✅ NICHT envelope_xdr!
+      {
+        headers: { Authorization: `Key ${PI_API_KEY}` }
+      }
+    );
+
+    // 5️⃣ Optional: Supabase-Update
+    await supabase
+      .from('payments')
+      .update({
+        status: 'completed',
+        txid
+      })
+      .eq('payment_id', paymentId);
+
+    res.json({
+      success: true,
+      paymentId,
+      txid,
+      pi: completeResponse.data
+    });
+
+  } catch (err) {
+    console.error('❌ Fehler bei /submitPayment:', err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data?.error || err.message,
+      details: err.response?.data,
+    });
+  }
+});
+
+//CompletePayment Teil für App-To-User Zahlung
+app.post('/completePayment', async (req, res) => {
+  const { paymentId } = req.body;
+
+  try {
+    // 📡 Zahlung laden
+    const piResponse = await axios.get(`https://api.minepi.com/v2/payments/${paymentId}`, {
+      headers: {
+        Authorization: `Key ${PI_API_KEY}`,
+      },
+    });
+
+    const piData = piResponse.data;
+    const recipient = piData.to_address;
+    const amount = piData.amount.toString();
+
+    const server = new Server(HORIZON_URL);
+    const sourceKeypair = Keypair.fromSecret(WALLET_KEYPAIR);
+    const account = await server.loadAccount(sourceKeypair.publicKey());
+
+    const tx = new TransactionBuilder(account, {
+      fee: '1000',
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(
+        Operation.payment({
+          destination: recipient,
+          asset: Asset.native(),
+          amount,
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(sourceKeypair);
+
+    const txResponse = await server.submitTransaction(tx);
+    const txid = txResponse.hash;
+
+    // ✅ Pi API updaten
+    await axios.post(
       `https://api.minepi.com/v2/payments/${paymentId}/complete`,
       { txid },
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
-          'Content-Type': 'application/json'
-        }
+          Authorization: `Key ${PI_API_KEY}`,
+        },
       }
     );
 
-    const verified = piResponse.data?.transaction?.verified ?? false;
-
-    const { error } = await supabase
-      .from('transactions')
+    // 🧾 Supabase aktualisieren
+    const { error: updateError } = await supabase
+      .from('payments')
       .update({
-        txid,
-        status: verified ? 'completed' : 'unverified'
+        status: 'completed',
+        txid
       })
       .eq('payment_id', paymentId);
 
-    if (error) {
-      console.error("❌ Supabase update error:", error);
-      return res.status(500).json({ error: 'Supabase update fehlgeschlagen' });
+    if (updateError) {
+      console.error('❌ Fehler beim Aktualisieren:', updateError);
+      return res.status(500).json({ error: 'Fehler beim Speichern in Supabase' });
     }
 
     res.json({
       success: true,
       txid,
-      payment_id: paymentId,
-      status: verified ? 'completed' : 'unverified',
-      piResponse: piResponse.data
+      status: 'completed'
     });
+
   } catch (err) {
-    console.error("❌ Fehler bei /complete-payment:", err.response?.data || err.message);
-    res.status(err.response?.status || 500).json({
-      error: err.response?.data?.error || err.message,
-      details: err.response?.data
+    console.error('❌ Fehler bei /completePayment:', err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data?.error || err.message
     });
   }
 });
 
-
-// 🚨 Zahlung abbrechen (Nur für Notfälle)
-app.post('/cancel-payment', validateApiKey, async (req, res) => {
+app.post('/cancel-payment', async (req, res) => {
   try {
     const { paymentId } = req.body;
     if (!paymentId) throw new Error("paymentId fehlt");
@@ -177,17 +280,13 @@ app.post('/cancel-payment', validateApiKey, async (req, res) => {
       {},
       {
         headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`,
+          Authorization: `Key ${PI_API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
     );
 
-    res.json({ 
-      status: 'cancelled',
-      piData: response.data 
-    });
-
+    res.json({ status: 'cancelled', piData: response.data });
   } catch (error) {
     const piError = error.response?.data?.error_message || error.message;
     console.error("CANCEL ERROR:", piError);
@@ -195,84 +294,6 @@ app.post('/cancel-payment', validateApiKey, async (req, res) => {
   }
 });
 
-// 🛠️ Debug-Endpunkt für hängige Zahlungen
-app.post('/force-resolve-payment', validateApiKey, async (req, res) => {
-  try {
-    const { paymentId } = req.body;
-    if (!paymentId) throw new Error("paymentId fehlt");
-
-    // 1. Status prüfen
-    const statusCheck = await axios.get(
-      `https://api.minepi.com/v2/payments/${paymentId}`,
-      {
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY_TESTNET}`
-        }
-      }
-    );
-    // 2. Je nach Status handeln
-    const paymentStatus = statusCheck.data.status;
-    let action = 'none';
-
-    if (paymentStatus.developer_approved === false) {
-      await axios.post(`https://api.minepi.com/v2/payments/${paymentId}/approve`, {}, { 
-        headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` } 
-      });
-      action = 'approved';
-    }
-
-    if (paymentStatus.transaction_verified === true && paymentStatus.developer_completed === false) {
-      await axios.post(`https://api.minepi.com/v2/payments/${paymentId}/complete`, { txid: "MANUAL_OVERRIDE" }, { 
-        headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` } 
-      });
-      action = 'completed';
-    }
-
-    res.json({
-      status: 'forced_resolution',
-      originalStatus: paymentStatus,
-      actionTaken: action
-    });
-
-  } catch (error) {
-    res.status(500).json({ 
-      error: error.response?.data || error.message 
-    });
-  }
-});
-
-app.post('/refund-payment', validateApiKey, async (req, res) => {
-  try {
-    const { paymentId, amount } = req.body;
-    const response = await axios.post(
-      `https://api.minepi.com/v2/payments/${paymentId}/refund`,
-      { amount },
-      { headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }}
-    );
-    res.json({ refundStatus: 'success', data: response.data });
-  } catch (error) {
-    res.status(500).json({ error: error.response?.data?.error_message || "Rückerstattung fehlgeschlagen" });
-  }
-});
-
-app.post('/bulk-cancel', validateApiKey, async (req, res) => {
-  try {
-    const { paymentIds } = req.body; // Array von IDs
-    const results = await Promise.all(
-      paymentIds.map(id => 
-        axios.post(`https://api.minepi.com/v2/payments/${id}/cancel`, {}, {
-          headers: { Authorization: `Key ${process.env.PI_API_KEY_TESTNET}` }
-        })
-      )
-    );
-    res.json({ cancelled: results.length });
-  } catch (error) {
-    res.status(500).json({ error: "Fehler beim Massenabbruch" });
-  }
-});
-
-// 🏁 Server starten
 app.listen(PORT, () => {
-  console.log(`🚀 Backend aktiv auf Port ${PORT}`);
-  console.log(`🔐 API-Key: ${process.env.PI_API_KEY_TESTNET ? "✅ Konfiguriert" : "❌ Fehlt!"}`);
+  console.log(`✅ Server läuft auf Port ${PORT}`);
 });
